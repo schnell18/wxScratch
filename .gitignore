@@ -1,0 +1,12 @@
+*.swp
+*.swo
+*.bak
+*.zip
+*.tgz
+*.pid
+*.log
+*.pyc
+*.pyo
+.idea/
+.ipynb_checkpoints/
+data/
