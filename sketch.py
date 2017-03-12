@@ -224,15 +224,6 @@ class SketchFrame(wx.Frame):
         box.Add(self.sketch, 1, wx.EXPAND)
         self.SetSizer(box)
 
-    def createToolBar(self):
-        self.toolbar = self.CreateToolBar(wx.TB_TEXT)
-        for each in self.toolbarData():
-            self.createSimpleTool(*each)
-        self.toolbar.AddSeparator()
-        for color in self.toolbarColorData():
-            self.createColorTool(color)
-        self.toolbar.Realize()
-
     def createSimpleTool(self, label, filename, help, handler):
         if not label:
             self.toolbar.AddSeparator()
@@ -266,6 +257,15 @@ class SketchFrame(wx.Frame):
 
     def toolbarColorData(self):
         return ("Black", "Red", "Green", "Blue")
+
+    def createToolBar(self):
+        self.toolbar = self.CreateToolBar(wx.TB_TEXT)
+        for each in self.toolbarData():
+            self.createSimpleTool(*each)
+        self.toolbar.AddSeparator()
+        for color in self.toolbarColorData():
+            self.createColorTool(color)
+        self.toolbar.Realize()
 
     def createMenuBar(self):
         menuBar = wx.MenuBar()

@@ -1,6 +1,5 @@
-*.swn
-*.swp
-*.swo
+*~
+*.sw?
 *.bak
 *.zip
 *.tgz
