@@ -15,9 +15,8 @@ class CurriculumPanel(wx.Panel):
             wx.DefaultSize,
             wx.HSCROLL|wx.VSCROLL
         )
+        self.model = None
         panelSizer = wx.BoxSizer(wx.HORIZONTAL)
-        # TODO: remove back ground colour here later
-        self.scrollWin.SetBackgroundColour("Red")
         self.scrollWin.SetScrollRate(5, 5)
         scrollSizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -137,7 +136,7 @@ class CurriculumPanel(wx.Panel):
         self.previewVideoLabel.Wrap(-1)
         bifSizer.Add(self.previewVideoLabel, 0, wx.ALL, 5)
 
-        self.previewVideoLabel = wx.TextCtrl(
+        self.previewVideoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             wx.EmptyString,
@@ -145,7 +144,7 @@ class CurriculumPanel(wx.Panel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.previewVideoLabel, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(self.previewVideoText, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(( 0, 0), 1, wx.EXPAND, 5)
 
         self.coverLabel = wx.StaticText(
@@ -256,8 +255,8 @@ class CurriculumPanel(wx.Panel):
         self.dvRelatedRefNo = self.dvRelated.AppendTextColumn(u"课程编号")
         self.dvRelatedTitle = self.dvRelated.AppendTextColumn(u"标题")
         self.dvRelatedCover = self.dvRelated.AppendTextColumn(u"封面")
-        relatedSizer.Add(self.dvRelated, 0, wx.ALL|wx.EXPAND, 5)
 
+        relatedSizer.Add(self.dvRelated, 0, wx.ALL|wx.EXPAND, 5)
         scrollSizer.Add(relatedSizer, 1, wx.EXPAND|wx.ALL, 5)
 
         self.scrollWin.SetSizer(scrollSizer)
@@ -265,4 +264,23 @@ class CurriculumPanel(wx.Panel):
         self.SetSizer(panelSizer)
         self.Layout()
 
+    def SetModel(self, model):
+        self.model = model
+        self.refNoText.SetValue(model.ref_no)
+        self.titleText.SetValue(model.title)
+        self.descriptionText.SetValue(model.description)
+        self.cornerTypeChoice.SetValue(model.corner_label)
+        self.previewVideoText.SetValue(model.preview_video)
+        self.coverText.SetValue(model.cover)
+        self.iconText.SetValue(model.icon)
+
+        # load lessons
+        for seq, lesson in enumerate(model.curriculum_lesson):
+            row = [seq, lesson.ref_no, lesson.title, lesson.rest]
+            self.dvLessons.AppendItem(row)
+
+        # load related curriculum
+        for curr in model.next_curriculum:
+            row = [curr.ref_no, curr.title, curr.cover]
+            self.dvRelated.AppendItem(row)
 

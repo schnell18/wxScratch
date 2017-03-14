@@ -7,7 +7,7 @@ from ftui import LessonPanel
 from ftui import CurriculumPanel
 
 
-class MyFrame2(wx.Frame):
+class FtFrame(wx.Frame):
 
     def __init__(self, parent):
         wx.Frame.__init__(
@@ -124,6 +124,9 @@ class MyFrame2(wx.Frame):
             self.tree.AppendItem(lessonId, "Lesson %s" % l, 1)
         for e in range(0, 9):
             self.tree.AppendItem(exerciseId, "Exercise %s" % e, 2)
+        self.tree.Expand(rootId)
+
+        self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
 
         bSizer3.Add(self.tree, 3, wx.EXPAND|wx.RIGHT, 5)
         scrollWin.SetSizer(bSizer3)
@@ -179,6 +182,17 @@ class MyFrame2(wx.Frame):
             self.createSimpleTool(*each)
         self.toolbar.Realize()
 
+    def OnSelChanged(self, event):
+        label = self.tree.GetItemText(event.GetItem())
+        selection = 0
+        if label.startswith('Curriculum'):
+            selection = 0
+        elif label.startswith('Lesson'):
+            selection = 1
+        elif label.startswith('Exercise'):
+            selection = 2
+        self.right.SetSelection(selection)
+
     def OnNew(self, event):
         pass
 
@@ -203,6 +217,6 @@ class MyFrame2(wx.Frame):
 
 if __name__ == '__main__':
     app = wx.App()
-    frame = MyFrame2(None)
+    frame = FtFrame(None)
     frame.Show()
     app.MainLoop()
