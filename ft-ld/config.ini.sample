@@ -1,0 +1,21 @@
+[general]
+download_base_url=https://www.dev.pajkdc.com/resource/fitness
+; download_base_url=https://www.test.pajkdc.com/resource/fitness
+
+[mysql]
+user=pajk
+password=abc
+host=192.168.11.20
+port=3306
+database=fitness
+
+[ftp.resource]
+user=devel
+password=devel
+host=192.168.11.20
+port=21
+root_dir=upload/fitness
+
+[tfs]
+base_url=http://static.dev.pajkdc.com/
+; base_url=http://static.test.pajkdc.com/
