@@ -6,7 +6,7 @@ import wx.dataview
 
 
 class CurriculumPanel(wx.Panel):
-    def __init__(self, parent):
+    def __init__(self, parent, model):
         wx.Panel.__init__(self, parent)
         self.scrollWin = wx.ScrolledWindow(
             self,
@@ -135,7 +135,7 @@ class CurriculumPanel(wx.Panel):
         self.previewVideoLabel.Wrap(-1)
         bifSizer.Add(self.previewVideoLabel, 0, wx.ALL, 5)
 
-        self.previewVideoLabel = wx.TextCtrl(
+        self.previewVideoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             wx.EmptyString,
@@ -143,7 +143,7 @@ class CurriculumPanel(wx.Panel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.previewVideoLabel, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(self.previewVideoText, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(( 0, 0), 1, wx.EXPAND, 5)
 
         self.coverLabel = wx.StaticText(
@@ -261,11 +261,34 @@ class CurriculumPanel(wx.Panel):
         self.scrollWin.SetSizer(scrollSizer)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
         self.SetSizer(panelSizer)
+        self.SetModel(model)
         self.Layout()
+
+    def SetModel(self, model):
+        self.model = model
+        self.refNoText.SetValue(model.ref_no)
+        self.titleText.SetValue(model.title)
+        self.descriptionText.SetValue(model.description)
+        self.cornerTypeChoice.SetSelection(model.corner_label_type)
+        self.previewVideoText.SetValue(model.preview_video)
+        self.coverText.SetValue(model.cover)
+        self.iconText.SetValue(model.icon)
+
+        # load lessons
+        if model.curriculum_lessons:
+            for seq, l in enumerate(model.curriculum_lessons):
+                row = [seq, l.lesson_ref, l.lesson_title, l.is_break]
+                self.dvLessons.AppendItem(row)
+
+        # load related curriculum
+        if model.next_curricula:
+            for curr in model.next_curricula:
+                row = [curr.ref_no, curr.title, curr.cover]
+                self.dvRelated.AppendItem(row)
 
 
 class LessonPanel(wx.Panel):
-    def __init__(self, parent):
+    def __init__(self, parent, model):
         wx.Panel.__init__(self, parent)
         self.scrollWin = wx.ScrolledWindow(
             self,
@@ -472,18 +495,18 @@ class LessonPanel(wx.Panel):
             wx.VERTICAL
         )
 
-        self.excerises = wx.dataview.DataViewListCtrl(
+        self.dvExcerises = wx.dataview.DataViewListCtrl(
             exercisesSizer.GetStaticBox(),
             wx.ID_ANY,
             wx.DefaultPosition,
             wx.DefaultSize,
             0
         )
-        self.dvColSeqNo = self.excerises.AppendTextColumn(u"序号")
-        self.dvColAction = self.excerises.AppendTextColumn(u"动作")
-        self.dvColRepetition = self.excerises.AppendTextColumn(u"重复")
-        self.dvColMeasure = self.excerises.AppendTextColumn(u"单位")
-        exercisesSizer.Add(self.excerises, 0, wx.ALL|wx.EXPAND, 5)
+        self.dvColSeqNo = self.dvExcerises.AppendTextColumn(u"序号")
+        self.dvColAction = self.dvExcerises.AppendTextColumn(u"动作")
+        self.dvColRepetition = self.dvExcerises.AppendTextColumn(u"重复")
+        self.dvColMeasure = self.dvExcerises.AppendTextColumn(u"单位")
+        exercisesSizer.Add(self.dvExcerises, 0, wx.ALL|wx.EXPAND, 5)
 
         scrollSzier.Add(exercisesSizer, 0, wx.EXPAND | wx.ALL, 5)
 
@@ -534,10 +557,27 @@ class LessonPanel(wx.Panel):
         self.scrollWin.Layout()
         scrollSzier.Fit(self.scrollWin)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
+        self.SetModel(model)
         self.SetSizer(panelSizer)
 
+    def SetModel(self, model):
+        self.model = model
+        self.refNoText.SetValue(model.ref_no)
+        self.typeChoice.SetSelection(model.type - 1)
+        self.titleText.SetValue(model.title)
+        self.descriptionText.SetValue(model.description)
+        self.encourageText.SetValue(model.encouragement)
+        self.nextDayIntroText.SetValue(model.next_day_intro)
+        self.bgmMusicText.SetValue(model.bg_music)
+
+        # TODO: load le
+        # for seq, le in enumerate(model.lesson_excerises):
+        #     row = [seq, le.ref_no, le.repitition, le.measure]
+        #     self.dvExcerises.AppendItem(row)
+
+
 class ExercisePanel(wx.Panel):
-    def __init__(self, parent):
+    def __init__(self, parent, model):
         wx.Panel.__init__(self, parent)
         self.scrollWin = wx.ScrolledWindow(
             self,
@@ -665,15 +705,16 @@ class ExercisePanel(wx.Panel):
         self.caloriesLabel.Wrap(-1)
         bifSizer.Add(self.caloriesLabel, 0, wx.ALL, 5)
 
-        self.caloriesText = wx.TextCtrl(
+        self.caloriesSpin = wx.SpinCtrl(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             wx.EmptyString,
             wx.DefaultPosition,
             wx.DefaultSize,
-            0
+            0,
+            max=100000
         )
-        bifSizer.Add(self.caloriesText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(self.caloriesSpin, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(( 0, 0), 1, wx.EXPAND, 5)
 
         self.durationLabel = wx.StaticText(
@@ -687,15 +728,16 @@ class ExercisePanel(wx.Panel):
         self.durationLabel.Wrap(-1)
         bifSizer.Add(self.durationLabel, 0, wx.ALL, 5)
 
-        self.durationText = wx.TextCtrl(
+        self.durationSpin = wx.SpinCtrl(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             wx.EmptyString,
             wx.DefaultPosition,
             wx.DefaultSize,
-            0
+            0,
+            max=100000
         )
-        bifSizer.Add(self.durationText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(self.durationSpin, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
 
         self.thumbnail = wx.StaticText(
@@ -780,6 +822,7 @@ class ExercisePanel(wx.Panel):
             wx.DefaultSize,
             0
         )
+        self.dvIlluCtrlSeqNo = self.dvIlluCtrl.AppendTextColumn(u"序号")
         self.dvIlluCtrlTitle = self.dvIlluCtrl.AppendTextColumn(u"标题")
         self.dvIlluCtrlDescription = self.dvIlluCtrl.AppendTextColumn(u"描述")
         self.dvIlluCtrlPic = self.dvIlluCtrl.AppendTextColumn(u"图片")
@@ -792,5 +835,22 @@ class ExercisePanel(wx.Panel):
         scrollSizer.Fit(self.scrollWin)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
         self.SetSizer(panelSizer)
+        self.SetModel(model)
         self.Layout()
+
+    def SetModel(self, model):
+        self.model = model
+        self.exerciseRefNoText.SetValue(model.ref_no)
+        self.typeChoice.SetSelection(model.type - 1)
+        self.nameText.SetValue(model.action)
+        self.titleText.SetValue(model.title)
+        self.caloriesSpin.SetValue(model.calories)
+        self.durationSpin.SetValue(model.duration)
+        self.thumbnailText.SetValue(model.thumbnail)
+        self.videoText.SetValue(model.video_name)
+
+        # load illustrations
+        for seq, illu in enumerate(model.illustrations):
+            row = [seq, illu.title, illu.description, illu.images]
+            self.dvIlluCtrl.AppendItem(row)
 

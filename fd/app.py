@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
 
+import ConfigParser
 import wx
 import wx.aui
-from ftui import ExercisePanel
-from ftui import LessonPanel
-from ftui import CurriculumPanel
+from fitness.uilib import ExercisePanel
+from fitness.uilib import LessonPanel
+from fitness.uilib import CurriculumPanel
+from fitness.parser import Parser
+from fitness.model import Curriculum
+from fitness.model import Lesson
+from fitness.model import Exercise
+from os.path import expanduser
 
 
 class FtFrame(wx.Frame):
@@ -16,7 +22,7 @@ class FtFrame(wx.Frame):
             id = wx.ID_ANY,
             title = wx.EmptyString,
             pos = wx.DefaultPosition,
-            size = wx.Size(800, 600),
+            size = wx.Size(1000, 700),
             style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL
         )
 
@@ -32,10 +38,10 @@ class FtFrame(wx.Frame):
         self.sp = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE|wx.SP_3DSASH)
         self.left = self.createTreePanel(self.sp)
         self.right = self.createNotbook(self.sp)
-        self.sp.SplitVertically(self.left, self.right, 200)
+        self.sp.SplitVertically(self.left, self.right, 300)
 
         self.Layout()
-        self.Centre(wx.BOTH)
+        self.Centre()
 
     def __del__(self):
         pass
@@ -108,25 +114,14 @@ class FtFrame(wx.Frame):
             wx.DefaultSize,
             wx.TR_DEFAULT_STYLE
         )
+        self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
+
         il = wx.ImageList(16, 16, True)
         for img in ['curriculum', 'lesson', 'exercise']:
             bmp = wx.Bitmap(img + '.png', wx.BITMAP_TYPE_PNG)
             il.Add(bmp)
         self.tree.AssignImageList(il)
-
-        rootId = self.tree.AddRoot("Curriculum Bundle")
-        currId = self.tree.AppendItem(rootId, "Curricula", 0)
-        lessonId = self.tree.AppendItem(rootId, "Lessons", 1)
-        exerciseId = self.tree.AppendItem(rootId, "Exercises", 2)
-        for c in range(0, 9):
-            self.tree.AppendItem(currId, "Curriculum %s" % c, 0)
-        for l in range(0, 9):
-            self.tree.AppendItem(lessonId, "Lesson %s" % l, 1)
-        for e in range(0, 9):
-            self.tree.AppendItem(exerciseId, "Exercise %s" % e, 2)
-        self.tree.Expand(rootId)
-
-        self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
+        self.rootId = self.tree.AddRoot("Curriculum Bundle")
 
         bSizer3.Add(self.tree, 3, wx.EXPAND|wx.RIGHT, 5)
         scrollWin.SetSizer(bSizer3)
@@ -149,12 +144,6 @@ class FtFrame(wx.Frame):
             il.Add(bmp)
         notebook.AssignImageList(il)
 
-        curr = CurriculumPanel(notebook)
-        lesson = LessonPanel(notebook)
-        exercise = ExercisePanel(notebook)
-        notebook.AddPage(curr, u"课程", True, 0)
-        notebook.AddPage(lesson, u"子课", True, 1)
-        notebook.AddPage(exercise, u"动作", True, 2)
         return notebook
 
     def createSimpleTool(self, label, filename, help, handler):
@@ -183,21 +172,40 @@ class FtFrame(wx.Frame):
         self.toolbar.Realize()
 
     def OnSelChanged(self, event):
-        label = self.tree.GetItemText(event.GetItem())
-        selection = 0
-        if label.startswith('Curriculum'):
-            selection = 0
-        elif label.startswith('Lesson'):
-            selection = 1
-        elif label.startswith('Exercise'):
-            selection = 2
-        self.right.SetSelection(selection)
+        notebook = self.right
+        data = self.tree.GetItemPyData(event.GetItem())
+        #TODO: find or create page
+        if isinstance(data, Curriculum):
+            curr = CurriculumPanel(notebook, data)
+            notebook.AddPage(curr, data.title, True, 0)
+        elif isinstance(data, Lesson):
+            lesson = LessonPanel(notebook, data)
+            notebook.AddPage(lesson, data.title, True, 1)
+        else:
+            exercise = ExercisePanel(notebook, data)
+            notebook.AddPage(exercise, data.action, True, 2)
+        # self.right.SetSelection(selection)
 
     def OnNew(self, event):
         pass
 
     def OnOpen(self, event):
-        pass
+        dlg = wx.DirDialog(
+            self,
+            message=u"请选择课程包目录"
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            print 'You selected: %s' % dlg.GetPath()
+
+            config = ConfigParser.RawConfigParser()
+            config.read(expanduser('~/.fitness/config.ini'))
+            db_cfg = {t[0]: t[1] for t in config.items('mysql')}
+            db_cfg['raise_on_warnings'] = True
+            mgr_cfg = {t[0]: t[1] for t in config.items('general')}
+            parser = Parser(mgr_cfg, db_cfg)
+            bundle = parser.parse_bundle(dlg.GetPath())
+            self.loadTree(bundle)
+
 
     def OnSave(self, event):
         pass
@@ -213,6 +221,22 @@ class FtFrame(wx.Frame):
 
     def OnCloseWindow(self, event):
         pass
+
+    def loadTree(self, bundle):
+        rootId = self.rootId
+        currId = self.tree.AppendItem(rootId, u"课程", 0)
+        lessonId = self.tree.AppendItem(rootId, u"子课", 1)
+        exerciseId = self.tree.AppendItem(rootId, u"动作", 2)
+        for c in bundle.curricula:
+            treeItemId = self.tree.AppendItem(currId, text=c.ref_no, image=0)
+            self.tree.SetItemPyData(treeItemId, c)
+        for l in bundle.lessons:
+            treeItemId = self.tree.AppendItem(lessonId, l.title, 1)
+            self.tree.SetItemPyData(treeItemId, l)
+        for e in bundle.exercises:
+            treeItemId = self.tree.AppendItem(exerciseId, e.title, 2)
+            self.tree.SetItemPyData(treeItemId, e)
+        self.tree.ExpandAll()
 
 
 if __name__ == '__main__':
