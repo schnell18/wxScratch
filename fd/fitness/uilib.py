@@ -7,7 +7,7 @@ import wx.dataview
 
 class CurriculumPanel(wx.Panel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent)
+        wx.Panel.__init__(self, parent, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -276,7 +276,7 @@ class CurriculumPanel(wx.Panel):
 
         # load lessons
         if model.curriculum_lessons:
-            for seq, l in enumerate(model.curriculum_lessons):
+            for seq, l in enumerate(model.curriculum_lessons, 1):
                 row = [seq, l.lesson_ref, l.lesson_title, l.is_break]
                 self.dvLessons.AppendItem(row)
 
@@ -289,7 +289,7 @@ class CurriculumPanel(wx.Panel):
 
 class LessonPanel(wx.Panel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent)
+        wx.Panel.__init__(self, parent, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -483,75 +483,7 @@ class LessonPanel(wx.Panel):
         )
         bifSizer.Add(self.bmgMusicBtn, 0, wx.ALL, 5)
         biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
-
         scrollSzier.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
-
-        exercisesSizer = wx.StaticBoxSizer(
-            wx.StaticBox(
-                self.scrollWin,
-                wx.ID_ANY,
-                u"动作编排"
-            ),
-            wx.VERTICAL
-        )
-
-        self.dvExcerises = wx.dataview.DataViewListCtrl(
-            exercisesSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        self.dvColSeqNo = self.dvExcerises.AppendTextColumn(u"序号")
-        self.dvColAction = self.dvExcerises.AppendTextColumn(u"动作")
-        self.dvColRepetition = self.dvExcerises.AppendTextColumn(u"重复")
-        self.dvColMeasure = self.dvExcerises.AppendTextColumn(u"单位")
-        exercisesSizer.Add(self.dvExcerises, 0, wx.ALL|wx.EXPAND, 5)
-
-        scrollSzier.Add(exercisesSizer, 0, wx.EXPAND | wx.ALL, 5)
-
-        bvSizer = wx.StaticBoxSizer(
-            wx.StaticBox(
-                self.scrollWin,
-                wx.ID_ANY,
-                u"准备音"
-            ),
-            wx.VERTICAL
-        )
-
-        self.beginVoices = wx.dataview.DataViewListCtrl(
-            bvSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        self.dvColAudio = self.beginVoices.AppendTextColumn(u"音频")
-        self.dvColPosition = self.beginVoices.AppendTextColumn(u"位置")
-        bvSizer.Add(self.beginVoices, 0, wx.ALL|wx.EXPAND, 5)
-        scrollSzier.Add(bvSizer, 0, wx.EXPAND | wx.ALL, 5)
-
-        mdSizer = wx.StaticBoxSizer(
-            wx.StaticBox(
-                self.scrollWin,
-                wx.ID_ANY,
-                u"动作音"
-            ),
-            wx.VERTICAL
-        )
-
-        self.midVoices = wx.dataview.DataViewListCtrl(
-            mdSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        self.dvColAudio2 = self.midVoices.AppendTextColumn(u"音频")
-        self.dvColPosition2 = self.midVoices.AppendTextColumn(u"位置")
-        mdSizer.Add(self.midVoices, 0, wx.ALL|wx.EXPAND, 5)
-
-        scrollSzier.Add(mdSizer, 0, wx.EXPAND | wx.ALL, 5)
 
         self.scrollWin.SetSizer(scrollSzier)
         self.scrollWin.Layout()
@@ -570,15 +502,178 @@ class LessonPanel(wx.Panel):
         self.nextDayIntroText.SetValue(model.next_day_intro)
         self.bgmMusicText.SetValue(model.bg_music)
 
-        # TODO: load le
-        # for seq, le in enumerate(model.lesson_excerises):
-        #     row = [seq, le.ref_no, le.repitition, le.measure]
-        #     self.dvExcerises.AppendItem(row)
+
+class LessonExercisePanel(wx.Panel):
+    def __init__(self, parent, model):
+        wx.Panel.__init__(self, parent, name=model.name_for_ui())
+        self.scrollWin = wx.ScrolledWindow(
+            self,
+            wx.ID_ANY,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            wx.HSCROLL|wx.VSCROLL
+        )
+        self.scrollWin.SetScrollRate(5, 5)
+        panelSizer = wx.BoxSizer(wx.HORIZONTAL)
+        scrollSzier = wx.BoxSizer(wx.VERTICAL)
+
+        biSizer = wx.StaticBoxSizer(
+            wx.StaticBox(
+                self.scrollWin,
+                wx.ID_ANY,
+                u"动作编排"
+            ),
+            wx.VERTICAL
+        )
+
+        bifSizer = wx.FlexGridSizer(5, 3, 0, 0)
+        bifSizer.AddGrowableCol(1)
+        bifSizer.AddGrowableRow(3)
+        bifSizer.SetFlexibleDirection(wx.BOTH)
+        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+
+        self.refNoLabel = wx.StaticText(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            u"动作编码",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.refNoLabel.Wrap(-1)
+        bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
+
+        self.refNoText = wx.TextCtrl(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            wx.EmptyString,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+
+        self.repetitionLabel = wx.StaticText(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            u"重复",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.repetitionLabel.Wrap(-1)
+        bifSizer.Add(self.repetitionLabel, 0, wx.ALL, 5)
+
+        self.repetitionSpin = wx.SpinCtrl(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            wx.EmptyString,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0,
+            max=100
+        )
+        bifSizer.Add(self.repetitionSpin, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer((100, 0), 1, wx.EXPAND, 5)
+
+        self.measureLabel = wx.StaticText(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            u"单位",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.measureLabel.Wrap(-1)
+        bifSizer.Add(self.measureLabel, 0, wx.ALL, 5)
+
+        measureChoices = [u'次', u'秒']
+        self.measureChoice = wx.Choice(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            measureChoices,
+            0
+        )
+        self.measureChoice.SetSelection(0)
+        bifSizer.Add(self.measureChoice, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        biSizer.Add(bifSizer, 1, wx.EXPAND | wx.ALL, 5)
+        scrollSzier.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        bvSizer = wx.StaticBoxSizer(
+            wx.StaticBox(
+                self.scrollWin,
+                wx.ID_ANY,
+                u"准备音"
+            ),
+            wx.VERTICAL
+        )
+
+        self.beginVoices = wx.dataview.DataViewListCtrl(
+            bvSizer.GetStaticBox(),
+            wx.ID_ANY,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.beginVoices.AppendTextColumn(u"音频")
+        self.beginVoices.AppendTextColumn(u"位置")
+        bvSizer.Add(self.beginVoices, 0, wx.ALL|wx.EXPAND, 5)
+        scrollSzier.Add(bvSizer, 1, wx.EXPAND | wx.ALL, 5)
+
+        mdSizer = wx.StaticBoxSizer(
+            wx.StaticBox(
+                self.scrollWin,
+                wx.ID_ANY,
+                u"动作音"
+            ),
+            wx.VERTICAL
+        )
+
+        self.midVoices = wx.dataview.DataViewListCtrl(
+            mdSizer.GetStaticBox(),
+            wx.ID_ANY,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.midVoices.AppendTextColumn(u"音频")
+        self.midVoices.AppendTextColumn(u"位置")
+        mdSizer.Add(self.midVoices, 0, wx.ALL|wx.EXPAND, 5)
+
+        scrollSzier.Add(mdSizer, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.scrollWin.SetSizer(scrollSzier)
+        self.scrollWin.Layout()
+        scrollSzier.Fit(self.scrollWin)
+        panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
+        self.SetModel(model)
+        self.SetSizer(panelSizer)
+
+    def SetModel(self, model):
+        self.model = model
+        self.refNoText.SetValue(model.exercise_ref)
+        self.measureChoice.SetSelection(model.measure - 1)
+        self.repetitionSpin.SetValue(model.repetition)
+
+        # TODO: load begin voice
+        for seq, bv in enumerate(model.begin_voices, 1):
+            row = [seq, bv.audio_name, bv.position]
+            self.beginVoices.AppendItem(row)
+
+        # TODO: load mid voice
+        for seq, bv in enumerate(model.mid_voices, 1):
+            row = [seq, bv.audio_name, bv.position]
+            self.midVoices.AppendItem(row)
+
 
 
 class ExercisePanel(wx.Panel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent)
+        wx.Panel.__init__(self, parent, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -740,7 +835,7 @@ class ExercisePanel(wx.Panel):
         bifSizer.Add(self.durationSpin, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
 
-        self.thumbnail = wx.StaticText(
+        self.thumbnailLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             u"预览图",
@@ -748,8 +843,8 @@ class ExercisePanel(wx.Panel):
             wx.DefaultSize,
             0
         )
-        self.thumbnail.Wrap(-1)
-        bifSizer.Add(self.thumbnail, 0, wx.ALL, 5)
+        self.thumbnailLabel.Wrap(-1)
+        bifSizer.Add(self.thumbnailLabel, 0, wx.ALL, 5)
 
         self.thumbnailText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -801,35 +896,8 @@ class ExercisePanel(wx.Panel):
             0
         )
         bifSizer.Add(self.videoBtn, 0, wx.ALL, 5)
-
         biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
-
-        scrollSizer.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
-
-        illuSizer = wx.StaticBoxSizer(
-            wx.StaticBox(
-                self.scrollWin,
-                wx.ID_ANY,
-                u"动作详解"
-            ),
-            wx.VERTICAL
-        )
-
-        self.dvIlluCtrl = wx.dataview.DataViewListCtrl(
-            illuSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        self.dvIlluCtrlSeqNo = self.dvIlluCtrl.AppendTextColumn(u"序号")
-        self.dvIlluCtrlTitle = self.dvIlluCtrl.AppendTextColumn(u"标题")
-        self.dvIlluCtrlDescription = self.dvIlluCtrl.AppendTextColumn(u"描述")
-        self.dvIlluCtrlPic = self.dvIlluCtrl.AppendTextColumn(u"图片")
-        illuSizer.Add(self.dvIlluCtrl, 0, wx.ALL|wx.EXPAND, 5)
-
-        scrollSizer.Add(illuSizer, 0, wx.EXPAND | wx.ALL, 5)
-
+        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
         scrollSizer.Fit(self.scrollWin)
@@ -849,8 +917,90 @@ class ExercisePanel(wx.Panel):
         self.thumbnailText.SetValue(model.thumbnail)
         self.videoText.SetValue(model.video_name)
 
-        # load illustrations
-        for seq, illu in enumerate(model.illustrations):
-            row = [seq, illu.title, illu.description, illu.images]
-            self.dvIlluCtrl.AppendItem(row)
 
+class IllustrationPanel(wx.Panel):
+    def __init__(self, parent, model):
+        wx.Panel.__init__(self, parent, name=model.name_for_ui())
+        self.scrollWin = wx.ScrolledWindow(
+            self,
+            wx.ID_ANY,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            wx.HSCROLL|wx.VSCROLL
+        )
+        self.scrollWin.SetScrollRate(5, 5)
+        panelSizer = wx.BoxSizer(wx.HORIZONTAL)
+        scrollSizer = wx.BoxSizer(wx.VERTICAL)
+
+        illuSizer = wx.StaticBoxSizer(
+            wx.StaticBox(
+                self.scrollWin,
+                wx.ID_ANY,
+                u"动作详解"
+            ),
+            wx.VERTICAL
+        )
+
+        bifSizer = wx.FlexGridSizer(3, 3, 0, 0)
+        bifSizer.AddGrowableCol(1)
+        bifSizer.SetFlexibleDirection(wx.BOTH)
+        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+
+        self.illuTitleLabel = wx.StaticText(
+            illuSizer.GetStaticBox(),
+            wx.ID_ANY,
+            u"标题",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.illuTitleLabel.Wrap(-1)
+        bifSizer.Add(self.illuTitleLabel, 0, wx.ALL, 5)
+
+        self.illuTitleText = wx.TextCtrl(
+            illuSizer.GetStaticBox(),
+            wx.ID_ANY,
+            wx.EmptyString,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        bifSizer.Add(self.illuTitleText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer((100, 0), 1, wx.EXPAND, 5)
+
+        self.illuDescriptionLabel = wx.StaticText(
+            illuSizer.GetStaticBox(),
+            wx.ID_ANY,
+            u"描述",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.illuDescriptionLabel.Wrap(-1)
+        bifSizer.Add(self.illuDescriptionLabel, 0, wx.ALL, 5)
+
+        self.illuDescriptionText = wx.TextCtrl(
+            illuSizer.GetStaticBox(),
+            wx.ID_ANY,
+            wx.EmptyString,
+            wx.DefaultPosition,
+            wx.Size(-1, 160),
+            wx.TE_MULTILINE
+        )
+        bifSizer.Add(self.illuDescriptionText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        illuSizer.Add(bifSizer, 1, wx.EXPAND, 5)
+        scrollSizer.Add(illuSizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        self.scrollWin.SetSizer(scrollSizer)
+        self.scrollWin.Layout()
+        scrollSizer.Fit(self.scrollWin)
+        panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
+        self.SetSizer(panelSizer)
+        self.SetModel(model)
+        self.Layout()
+
+    def SetModel(self, model):
+        self.model = model
+        self.illuTitleText.SetValue(model.title)
+        self.illuDescriptionText.SetValue(model.description)

@@ -3,13 +3,17 @@
 import ConfigParser
 import wx
 import wx.aui
+from fitness.uilib import IllustrationPanel
 from fitness.uilib import ExercisePanel
 from fitness.uilib import LessonPanel
+from fitness.uilib import LessonExercisePanel
 from fitness.uilib import CurriculumPanel
 from fitness.parser import Parser
 from fitness.model import Curriculum
 from fitness.model import Lesson
+from fitness.model import LessonExercise
 from fitness.model import Exercise
+from fitness.model import Illustration
 from os.path import expanduser
 
 
@@ -84,14 +88,6 @@ class FtFrame(wx.Frame):
                 ("&Open" , "Open sketch file" , self.OnOpen) ,
                 ("&Save" , "Save sketch file" , self.OnSave) ,
                 ("", "", ""),
-                ("&Color", (
-                    ("&Black"    , "" , self.OnColor      , wx.ITEM_RADIO) ,
-                    ("&Red"      , "" , self.OnColor      , wx.ITEM_RADIO) ,
-                    ("&Green"    , "" , self.OnColor      , wx.ITEM_RADIO) ,
-                    ("&Blue"     , "" , self.OnColor      , wx.ITEM_RADIO) ,
-                    ("&Other..." , "" , self.OnOtherColor , wx.ITEM_RADIO)
-                )),
-                ("", "", ""),
                 ("&Quit", "Quit", self.OnCloseWindow),
                 ("&About", "About", self.OnAbout)
             )
@@ -156,10 +152,12 @@ class FtFrame(wx.Frame):
 
     def toolbarData(self):
         return (
-            ("New", "new.png", "Create new sketch", self.OnNew),
+            ("New", "new.png", u"创建新的课程包", self.OnNew),
+            ("Open", "open.png", u"打开课程包", self.OnOpen),
+            ("Save", "save.png", u"保存课程包", self.OnSave),
             ("", "", "", ""),
-            ("Open", "open.png", "Open existing sketch", self.OnOpen),
-            ("Save", "save.png", "Save existing sketch", self.OnSave)
+            ("Add", "add.png", u"新增", self.OnAdd),
+            ("Remove", "remove.png", u"删除", self.OnRemove)
         )
 
     def toolbarColorData(self):
@@ -172,19 +170,31 @@ class FtFrame(wx.Frame):
         self.toolbar.Realize()
 
     def OnSelChanged(self, event):
-        notebook = self.right
         data = self.tree.GetItemPyData(event.GetItem())
-        #TODO: find or create page
-        if isinstance(data, Curriculum):
-            curr = CurriculumPanel(notebook, data)
-            notebook.AddPage(curr, data.title, True, 0)
-        elif isinstance(data, Lesson):
-            lesson = LessonPanel(notebook, data)
-            notebook.AddPage(lesson, data.title, True, 1)
+        if not data:
+            return
+
+        notebook = self.right
+        page = wx.FindWindowByName(data.name_for_ui(), notebook)
+        pageIndex = notebook.GetPageIndex(page)
+        if not page and pageIndex < 0 :
+            if isinstance(data, Curriculum):
+                curr = CurriculumPanel(notebook, data)
+                notebook.AddPage(curr, data.title, True, 0)
+            elif isinstance(data, Lesson):
+                lesson = LessonPanel(notebook, data)
+                notebook.AddPage(lesson, data.title, True, 1)
+            elif isinstance(data, LessonExercise):
+                le = LessonExercisePanel(notebook, data)
+                notebook.AddPage(le, data.exercise_ref, True, 1)
+            elif isinstance(data, Exercise):
+                exercise = ExercisePanel(notebook, data)
+                notebook.AddPage(exercise, data.action, True, 2)
+            elif isinstance(data, Illustration):
+                illustration = IllustrationPanel(notebook, data)
+                notebook.AddPage(illustration, data.title, True, 2)
         else:
-            exercise = ExercisePanel(notebook, data)
-            notebook.AddPage(exercise, data.action, True, 2)
-        # self.right.SetSelection(selection)
+            self.right.SetSelection(pageIndex)
 
     def OnNew(self, event):
         pass
@@ -210,6 +220,12 @@ class FtFrame(wx.Frame):
     def OnSave(self, event):
         pass
 
+    def OnAdd(self, event):
+        pass
+
+    def OnRemove(self, event):
+        pass
+
     def OnColor(self, event):
         pass
 
@@ -233,9 +249,17 @@ class FtFrame(wx.Frame):
         for l in bundle.lessons:
             treeItemId = self.tree.AppendItem(lessonId, l.title, 1)
             self.tree.SetItemPyData(treeItemId, l)
+            for seq, le in enumerate(l.lesson_exercises, 1):
+                leItemId = self.tree.AppendItem(treeItemId, le.exercise_ref, 1)
+                le.ui_ref_no = le.exercise_ref + '-' + str(seq)
+                self.tree.SetItemPyData(leItemId, le)
         for e in bundle.exercises:
             treeItemId = self.tree.AppendItem(exerciseId, e.title, 2)
             self.tree.SetItemPyData(treeItemId, e)
+            for seq, i in enumerate(e.illustrations, 1):
+                illuItemId = self.tree.AppendItem(treeItemId, i.title, 2)
+                i.ui_ref_no = e.ref_no + '-' + str(seq)
+                self.tree.SetItemPyData(illuItemId, i)
         self.tree.ExpandAll()
 
 
