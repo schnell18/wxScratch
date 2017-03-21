@@ -620,8 +620,7 @@ class LessonExercisePanel(wx.Panel):
             0
         )
         self.beginVoices.AppendTextColumn(u"音频")
-        self.beginVoices.AppendTextColumn(u"位置")
-        bvSizer.Add(self.beginVoices, 0, wx.ALL|wx.EXPAND, 5)
+        bvSizer.Add(self.beginVoices, 1, wx.ALL|wx.EXPAND, 5)
         scrollSzier.Add(bvSizer, 1, wx.EXPAND | wx.ALL, 5)
 
         mdSizer = wx.StaticBoxSizer(
@@ -640,9 +639,9 @@ class LessonExercisePanel(wx.Panel):
             wx.DefaultSize,
             0
         )
-        self.midVoices.AppendTextColumn(u"音频")
         self.midVoices.AppendTextColumn(u"位置")
-        mdSizer.Add(self.midVoices, 0, wx.ALL|wx.EXPAND, 5)
+        self.midVoices.AppendTextColumn(u"音频")
+        mdSizer.Add(self.midVoices, 1, wx.ALL|wx.EXPAND, 5)
 
         scrollSzier.Add(mdSizer, 1, wx.EXPAND | wx.ALL, 5)
 
@@ -659,14 +658,14 @@ class LessonExercisePanel(wx.Panel):
         self.measureChoice.SetSelection(model.measure - 1)
         self.repetitionSpin.SetValue(model.repetition)
 
-        # TODO: load begin voice
-        for seq, bv in enumerate(model.begin_voices, 1):
-            row = [seq, bv.audio_name, bv.position]
+        # load begin voices
+        for bv in sorted(model.begin_voices, key=lambda e : e.position):
+            row = [bv.audio_name]
             self.beginVoices.AppendItem(row)
 
-        # TODO: load mid voice
-        for seq, bv in enumerate(model.mid_voices, 1):
-            row = [seq, bv.audio_name, bv.position]
+        # load mid voices
+        for bv in model.mid_voices:
+            row = [bv.position, bv.audio_name]
             self.midVoices.AppendItem(row)
 
 

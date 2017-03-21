@@ -39,6 +39,13 @@ class FtFrame(wx.Frame):
 
         # layout main interface
         # splitter window
+
+        self.imageList = wx.ImageList(16, 16, True)
+        for img in [
+            'curriculum', 'lesson', 'exercise', 'illustration', 'segment']:
+            bmp = wx.Bitmap(img + '.png', wx.BITMAP_TYPE_PNG)
+            self.imageList.Add(bmp)
+
         self.sp = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE|wx.SP_3DSASH)
         self.left = self.createTreePanel(self.sp)
         self.right = self.createNotbook(self.sp)
@@ -112,12 +119,8 @@ class FtFrame(wx.Frame):
         )
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
 
-        il = wx.ImageList(16, 16, True)
-        for img in ['curriculum', 'lesson', 'exercise']:
-            bmp = wx.Bitmap(img + '.png', wx.BITMAP_TYPE_PNG)
-            il.Add(bmp)
-        self.tree.AssignImageList(il)
-        self.rootId = self.tree.AddRoot("Curriculum Bundle")
+        self.tree.AssignImageList(self.imageList)
+        self.rootId = self.tree.AddRoot(u"课程包")
 
         bSizer3.Add(self.tree, 3, wx.EXPAND|wx.RIGHT, 5)
         scrollWin.SetSizer(bSizer3)
@@ -134,12 +137,7 @@ class FtFrame(wx.Frame):
             wx.aui.AUI_NB_DEFAULT_STYLE
         )
 
-        il = wx.ImageList(16, 16, True)
-        for img in ['curriculum', 'lesson', 'exercise']:
-            bmp = wx.Bitmap(img + '.png', wx.BITMAP_TYPE_PNG)
-            il.Add(bmp)
-        notebook.AssignImageList(il)
-
+        notebook.AssignImageList(self.imageList)
         return notebook
 
     def createSimpleTool(self, label, filename, help, handler):
@@ -157,7 +155,9 @@ class FtFrame(wx.Frame):
             ("Save", "save.png", u"保存课程包", self.OnSave),
             ("", "", "", ""),
             ("Add", "add.png", u"新增", self.OnAdd),
-            ("Remove", "remove.png", u"删除", self.OnRemove)
+            ("Remove", "remove.png", u"删除", self.OnRemove),
+            ("", "", "", ""),
+            ("Upload", "upload.png", u"上传", self.OnUpload),
         )
 
     def toolbarColorData(self):
@@ -186,13 +186,13 @@ class FtFrame(wx.Frame):
                 notebook.AddPage(lesson, data.title, True, 1)
             elif isinstance(data, LessonExercise):
                 le = LessonExercisePanel(notebook, data)
-                notebook.AddPage(le, data.exercise_ref, True, 1)
+                notebook.AddPage(le, data.exercise_ref, True, 4)
             elif isinstance(data, Exercise):
                 exercise = ExercisePanel(notebook, data)
                 notebook.AddPage(exercise, data.action, True, 2)
             elif isinstance(data, Illustration):
                 illustration = IllustrationPanel(notebook, data)
-                notebook.AddPage(illustration, data.title, True, 2)
+                notebook.AddPage(illustration, data.title, True, 3)
         else:
             self.right.SetSelection(pageIndex)
 
@@ -205,8 +205,6 @@ class FtFrame(wx.Frame):
             message=u"请选择课程包目录"
         )
         if dlg.ShowModal() == wx.ID_OK:
-            print 'You selected: %s' % dlg.GetPath()
-
             config = ConfigParser.RawConfigParser()
             config.read(expanduser('~/.fitness/config.ini'))
             db_cfg = {t[0]: t[1] for t in config.items('mysql')}
@@ -215,7 +213,8 @@ class FtFrame(wx.Frame):
             parser = Parser(mgr_cfg, db_cfg)
             bundle = parser.parse_bundle(dlg.GetPath())
             self.loadTree(bundle)
-
+            self.statusbar.SetStatusText(dlg.GetPath(), 2)
+        dlg.Destroy()
 
     def OnSave(self, event):
         pass
@@ -224,6 +223,10 @@ class FtFrame(wx.Frame):
         pass
 
     def OnRemove(self, event):
+        pass
+
+    def OnUpload(self, event):
+        # TODO: start wizard here
         pass
 
     def OnColor(self, event):
@@ -250,14 +253,14 @@ class FtFrame(wx.Frame):
             treeItemId = self.tree.AppendItem(lessonId, l.title, 1)
             self.tree.SetItemPyData(treeItemId, l)
             for seq, le in enumerate(l.lesson_exercises, 1):
-                leItemId = self.tree.AppendItem(treeItemId, le.exercise_ref, 1)
+                leItemId = self.tree.AppendItem(treeItemId, le.exercise_ref, 4)
                 le.ui_ref_no = le.exercise_ref + '-' + str(seq)
                 self.tree.SetItemPyData(leItemId, le)
         for e in bundle.exercises:
             treeItemId = self.tree.AppendItem(exerciseId, e.title, 2)
             self.tree.SetItemPyData(treeItemId, e)
             for seq, i in enumerate(e.illustrations, 1):
-                illuItemId = self.tree.AppendItem(treeItemId, i.title, 2)
+                illuItemId = self.tree.AppendItem(treeItemId, i.title, 3)
                 i.ui_ref_no = e.ref_no + '-' + str(seq)
                 self.tree.SetItemPyData(illuItemId, i)
         self.tree.ExpandAll()
