@@ -42,7 +42,8 @@ class FtFrame(wx.Frame):
 
         self.imageList = wx.ImageList(16, 16, True)
         for img in [
-            'curriculum', 'lesson', 'exercise', 'illustration', 'segment']:
+            'bundle', 'curriculum', 'lesson',
+            'exercise', 'illustration', 'segment']:
             bmp = wx.Bitmap(img + '.png', wx.BITMAP_TYPE_PNG)
             self.imageList.Add(bmp)
 
@@ -120,7 +121,7 @@ class FtFrame(wx.Frame):
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
 
         self.tree.AssignImageList(self.imageList)
-        self.rootId = self.tree.AddRoot(u"课程包")
+        self.rootId = self.tree.AddRoot(u"课程包", 0)
 
         bSizer3.Add(self.tree, 3, wx.EXPAND|wx.RIGHT, 5)
         scrollWin.SetSizer(bSizer3)
@@ -180,19 +181,19 @@ class FtFrame(wx.Frame):
         if not page and pageIndex < 0 :
             if isinstance(data, Curriculum):
                 curr = CurriculumPanel(notebook, data)
-                notebook.AddPage(curr, data.title, True, 0)
+                notebook.AddPage(curr, data.title, True, 1)
             elif isinstance(data, Lesson):
                 lesson = LessonPanel(notebook, data)
-                notebook.AddPage(lesson, data.title, True, 1)
+                notebook.AddPage(lesson, data.title, True, 2)
             elif isinstance(data, LessonExercise):
                 le = LessonExercisePanel(notebook, data)
-                notebook.AddPage(le, data.exercise_ref, True, 4)
+                notebook.AddPage(le, data.exercise_ref, True, 5)
             elif isinstance(data, Exercise):
                 exercise = ExercisePanel(notebook, data)
-                notebook.AddPage(exercise, data.action, True, 2)
+                notebook.AddPage(exercise, data.action, True, 3)
             elif isinstance(data, Illustration):
                 illustration = IllustrationPanel(notebook, data)
-                notebook.AddPage(illustration, data.title, True, 3)
+                notebook.AddPage(illustration, data.title, True, 4)
         else:
             self.right.SetSelection(pageIndex)
 
@@ -243,27 +244,28 @@ class FtFrame(wx.Frame):
 
     def loadTree(self, bundle):
         rootId = self.rootId
-        currId = self.tree.AppendItem(rootId, u"课程", 0)
-        lessonId = self.tree.AppendItem(rootId, u"子课", 1)
-        exerciseId = self.tree.AppendItem(rootId, u"动作", 2)
+        currId = self.tree.AppendItem(rootId, u"课程", 1)
+        lessonId = self.tree.AppendItem(rootId, u"子课", 2)
+        exerciseId = self.tree.AppendItem(rootId, u"动作", 3)
         for c in bundle.curricula:
-            treeItemId = self.tree.AppendItem(currId, text=c.ref_no, image=0)
+            treeItemId = self.tree.AppendItem(currId, text=c.ref_no, image=1)
             self.tree.SetItemPyData(treeItemId, c)
         for l in bundle.lessons:
-            treeItemId = self.tree.AppendItem(lessonId, l.title, 1)
+            treeItemId = self.tree.AppendItem(lessonId, l.title, 2)
             self.tree.SetItemPyData(treeItemId, l)
             for seq, le in enumerate(l.lesson_exercises, 1):
-                leItemId = self.tree.AppendItem(treeItemId, le.exercise_ref, 4)
+                leItemId = self.tree.AppendItem(treeItemId, le.exercise_ref, 5)
                 le.ui_ref_no = le.exercise_ref + '-' + str(seq)
                 self.tree.SetItemPyData(leItemId, le)
         for e in bundle.exercises:
-            treeItemId = self.tree.AppendItem(exerciseId, e.title, 2)
+            treeItemId = self.tree.AppendItem(exerciseId, e.title, 3)
             self.tree.SetItemPyData(treeItemId, e)
             for seq, i in enumerate(e.illustrations, 1):
-                illuItemId = self.tree.AppendItem(treeItemId, i.title, 3)
+                illuItemId = self.tree.AppendItem(treeItemId, i.title, 4)
                 i.ui_ref_no = e.ref_no + '-' + str(seq)
                 self.tree.SetItemPyData(illuItemId, i)
         self.tree.ExpandAll()
+        self.tree.EnsureVisible(rootId)
 
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ from fitness.model import Audio
 from fitness.model import ResourceSet
 
 
-class FitnessResourceManager:
+class Loader:
 
     def __init__(self, cfg, repo, ftp, tfs=None):
         self.cfg = cfg
@@ -28,12 +28,9 @@ class FitnessResourceManager:
         self.ftp = ftp
         self.tfs = tfs
 
-    def process_curriculum_bundle(self, path):
-        # load curriculum bundle definition
-        print("Start parse and load resource bundle...")
-        (c, l, e) = self._load_bundle(path)
+    def upload(self, bundle):
+        (c, l, e) = (bundle.curricula, bundle.lessons, bundle.exercises)
 
-        print("Start upload audio and video files via FTP...")
         # upload audio and video
         try:
             self.ftp.connect()
@@ -44,11 +41,9 @@ class FitnessResourceManager:
         finally:
             self.ftp.disconnect()
 
-        print("Start upload image files to TFS...")
         # upload TFS pictures
         self._upload_tfs_resource(path, c, e)
 
-        print("Start generate and persist meta data...")
         # generate and persist meta data
         self._process_meta_data(c, l, e)
         return c, l, e
@@ -385,7 +380,7 @@ class FitnessResourceManager:
                         i.images_tfs = '|'.join(tfs_keys)
 
     def _upload_downloadable_resource(self, base_dir, lessons, exercises):
-        for lesson in lessons.values():
+        for lesson in lessons:
             if lesson.bg_music:
                 self.ftp.upload(
                     os.path.join(base_dir, lesson.bg_music),
@@ -409,7 +404,7 @@ class FitnessResourceManager:
                                 'l/' + os.path.dirname(bv.audio_name)
                             )
 
-        for exercise in exercises.values():
+        for exercise in exercises:
             if exercise.type != 1:
                 continue
             self.ftp.upload(
