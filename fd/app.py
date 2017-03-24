@@ -8,6 +8,7 @@ from fitness.uilib import ExercisePanel
 from fitness.uilib import LessonPanel
 from fitness.uilib import LessonExercisePanel
 from fitness.uilib import CurriculumPanel
+from fitness.uilib import ImpDialog
 from fitness.parser import Parser
 from fitness.model import Curriculum
 from fitness.model import Lesson
@@ -40,7 +41,7 @@ class FtFrame(wx.Frame):
         # layout main interface
         # splitter window
 
-        self.imageList = wx.ImageList(16, 16, True)
+        self.imageList = wx.ImageList(24, 24, True)
         for img in [
             'bundle', 'curriculum', 'lesson',
             'exercise', 'illustration', 'segment']:
@@ -159,7 +160,7 @@ class FtFrame(wx.Frame):
         #     ("Add", "add.png", u"新增", self.OnAdd),
         #     ("Remove", "remove.png", u"删除", self.OnRemove),
         #     ("", "", "", ""),
-        #     ("Upload", "upload.png", u"上传", self.OnUpload),
+        #     ("Upload", "upload.png", u"上传", self.OnImport),
         # )
         return (
             (u"新建", "new.png", u"创建新的课程包", self.OnNew),
@@ -169,7 +170,7 @@ class FtFrame(wx.Frame):
             (u"增加", "add.png", u"新增", self.OnAdd),
             (u"删除", "remove.png", u"删除", self.OnRemove),
             ("", "", "", ""),
-            (u"导入", "upload.png", u"上传", self.OnUpload),
+            (u"导入", "upload.png", u"导入课程包", self.OnImport),
         )
 
     def toolbarColorData(self):
@@ -223,8 +224,8 @@ class FtFrame(wx.Frame):
             db_cfg['raise_on_warnings'] = True
             mgr_cfg = {t[0]: t[1] for t in config.items('general')}
             parser = Parser(mgr_cfg, db_cfg)
-            bundle = parser.parse_bundle(dlg.GetPath())
-            self.loadTree(bundle)
+            self.bundle = parser.parse_bundle(dlg.GetPath())
+            self.loadTree(self.bundle)
             self.statusbar.SetStatusText(dlg.GetPath(), 2)
         dlg.Destroy()
 
@@ -262,9 +263,10 @@ class FtFrame(wx.Frame):
                 if pageIndex >= 0:
                     notebook.DeletePage(pageIndex)
 
-    def OnUpload(self, event):
-        # TODO: start wizard here
-        pass
+    def OnImport(self, event):
+        dlg = ImpDialog(self, self.bundle)
+        dlg.ShowModal()
+        dlg.Destroy()
 
     def OnColor(self, event):
         pass
