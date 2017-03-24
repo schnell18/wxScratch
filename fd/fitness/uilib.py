@@ -54,7 +54,7 @@ class CurriculumPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.titleLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -76,7 +76,7 @@ class CurriculumPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.titleText, 1, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.decriptionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -98,7 +98,7 @@ class CurriculumPanel(wx.Panel):
             wx.TE_MULTILINE
         )
         bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.cornerTypeLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -122,7 +122,7 @@ class CurriculumPanel(wx.Panel):
         )
         self.cornerTypeChoice.SetSelection(0)
         bifSizer.Add(self.cornerTypeChoice, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.previewVideoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -144,7 +144,7 @@ class CurriculumPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.previewVideoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(( 0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.coverLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -266,13 +266,27 @@ class CurriculumPanel(wx.Panel):
 
     def SetModel(self, model):
         self.model = model
-        self.refNoText.SetValue(model.ref_no)
-        self.titleText.SetValue(model.title)
-        self.descriptionText.SetValue(model.description)
-        self.cornerTypeChoice.SetSelection(model.corner_label_type)
-        self.previewVideoText.SetValue(model.preview_video)
-        self.coverText.SetValue(model.cover)
-        self.iconText.SetValue(model.icon)
+        self.refNoText.SetValue(
+            model.ref_no if model.ref_no else ''
+        )
+        self.titleText.SetValue(
+            model.title if model.title else ''
+        )
+        self.descriptionText.SetValue(
+            model.description if model.description else ''
+        )
+        self.cornerTypeChoice.SetSelection(
+            model.corner_label_type if model.corner_label_type else 0
+        )
+        self.previewVideoText.SetValue(
+            model.preview_video if model.preview_video else ''
+        )
+        self.coverText.SetValue(
+            model.cover if model.cover else ''
+        )
+        self.iconText.SetValue(
+            model.icon if model.icon else ''
+        )
 
         # load lessons
         if model.curriculum_lessons:
@@ -336,7 +350,7 @@ class LessonPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.TextLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -360,7 +374,7 @@ class LessonPanel(wx.Panel):
         )
         self.typeChoice.SetSelection(0)
         bifSizer.Add(self.typeChoice, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.titleLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -382,7 +396,7 @@ class LessonPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.titleText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.descriptionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -404,7 +418,7 @@ class LessonPanel(wx.Panel):
             wx.TE_MULTILINE
         )
         bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.encourageLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -427,7 +441,7 @@ class LessonPanel(wx.Panel):
         )
         bifSizer.Add(self.encourageText, 0, wx.ALL|wx.EXPAND, 5)
 
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.nextDayIntroLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -450,7 +464,7 @@ class LessonPanel(wx.Panel):
         )
         bifSizer.Add(self.nextDayIntroText, 0, wx.ALL|wx.EXPAND, 5)
 
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.bgmMusicLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -552,7 +566,7 @@ class LessonExercisePanel(wx.Panel):
             0
         )
         bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.repetitionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -575,7 +589,7 @@ class LessonExercisePanel(wx.Panel):
             max=100
         )
         bifSizer.Add(self.repetitionSpin, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((100, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(100)
 
         self.measureLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -599,7 +613,7 @@ class LessonExercisePanel(wx.Panel):
         )
         self.measureChoice.SetSelection(0)
         bifSizer.Add(self.measureChoice, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
         biSizer.Add(bifSizer, 1, wx.EXPAND | wx.ALL, 5)
         scrollSzier.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
 
@@ -718,7 +732,7 @@ class ExercisePanel(wx.Panel):
             0
         )
         bifSizer.Add(self.exerciseRefNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.typeLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -742,7 +756,7 @@ class ExercisePanel(wx.Panel):
         )
         self.typeChoice.SetSelection(0)
         bifSizer.Add(self.typeChoice, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.nameLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -764,7 +778,7 @@ class ExercisePanel(wx.Panel):
             0
         )
         bifSizer.Add(self.nameText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.titleLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -786,7 +800,7 @@ class ExercisePanel(wx.Panel):
             0
         )
         bifSizer.Add(self.titleText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.caloriesLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -809,7 +823,7 @@ class ExercisePanel(wx.Panel):
             max=100000
         )
         bifSizer.Add(self.caloriesSpin, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(( 0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.durationLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -832,7 +846,7 @@ class ExercisePanel(wx.Panel):
             max=100000
         )
         bifSizer.Add(self.durationSpin, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.thumbnailLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -965,7 +979,7 @@ class IllustrationPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.illuTitleText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((100, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(100)
 
         self.illuDescriptionLabel = wx.StaticText(
             illuSizer.GetStaticBox(),
@@ -987,7 +1001,7 @@ class IllustrationPanel(wx.Panel):
             wx.TE_MULTILINE
         )
         bifSizer.Add(self.illuDescriptionText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer((0, 0), 1, wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
         illuSizer.Add(bifSizer, 1, wx.EXPAND, 5)
         scrollSizer.Add(illuSizer, 0, wx.EXPAND | wx.ALL, 5)
 
