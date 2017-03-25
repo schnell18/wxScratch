@@ -1,7 +1,5 @@
 # coding=utf-8
 
-from __future__ import print_function
-
 import os.path
 import sys
 
@@ -13,9 +11,12 @@ class Loader:
         self.ftp = ftp
         self.tfs = tfs
 
-    def load(self, bundle):
+    def load(self, bundle, callback):
+        path = bundle.path
         (c, l, e) = (bundle.curricula, bundle.lessons, bundle.exercises)
 
+        if callback:
+            callback.update_progress(u"准备FTP上传", 2)
         # upload audio and video
         try:
             self.ftp.connect()
@@ -25,12 +26,22 @@ class Loader:
             raise
         finally:
             self.ftp.disconnect()
+        if callback:
+            callback.update_progress(u"完成FTP上传", 60)
 
+        if callback:
+            callback.update_progress(u"准备图片上传", 62)
         # upload TFS pictures
         self._upload_tfs_resource(path, c, e)
+        if callback:
+            callback.update_progress(u"完成图片上传", 80)
 
         # generate and persist meta data
+        if callback:
+            callback.update_progress(u"准备课程元数据导入", 82)
         self._process_meta_data(c, l, e)
+        if callback:
+            callback.update_progress(u"完成课程元数据导入", 100)
 
 
     def _upload_tfs_resource(self, base_dir, curricula, exercises):

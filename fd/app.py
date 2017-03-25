@@ -8,7 +8,7 @@ from fitness.uilib import ExercisePanel
 from fitness.uilib import LessonPanel
 from fitness.uilib import LessonExercisePanel
 from fitness.uilib import CurriculumPanel
-from fitness.uilib import ImpDialog
+from fitness.imp import ImpDialog
 from fitness.parser import Parser
 from fitness.model import Curriculum
 from fitness.model import Lesson

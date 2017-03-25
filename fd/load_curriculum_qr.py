@@ -43,10 +43,10 @@ if __name__ == '__main__':
     tfs = TFSClient(tfs_cfg)
     parser = Parser(mgr_cfg, repo)
     loader = Loader(mgr_cfg, repo, ftp, tfs)
-    bundle = parser.parse(bundle_dir)
+    bundle = parser.parse_bundle(bundle_dir)
     loader.load(bundle)
     print("Start generate QR code...")
-    for c in bundle.curriculua:
+    for c in bundle.curricula:
         svg = generate_qr_code(c)
         print("Generated QR code file %s" % (svg,))
     t1 = time()
