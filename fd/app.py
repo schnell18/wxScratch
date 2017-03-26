@@ -286,7 +286,7 @@ class FtFrame(wx.Frame):
         lessonId = self.tree.AppendItem(rootId, u"子课", 2)
         exerciseId = self.tree.AppendItem(rootId, u"动作", 3)
         for c in bundle.curricula:
-            treeItemId = self.tree.AppendItem(currId, text=c.ref_no, image=1)
+            treeItemId = self.tree.AppendItem(currId, text=c.title, image=1)
             self.tree.SetItemData(treeItemId, c)
         for l in bundle.lessons:
             treeItemId = self.tree.AppendItem(lessonId, l.title, 2)

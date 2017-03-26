@@ -3,6 +3,7 @@ import ftplib
 import sys
 
 from os.path import basename
+from time import sleep
 
 
 class FtpClient:
@@ -69,3 +70,18 @@ class FtpClient:
             self.__ftp.mkd(ancestor_dir)
         self.__ftp.cwd(ancestor_dir)
         self._ch_dir_rec(path_list)
+
+
+class MockFtpClient:
+
+    def __init__(self, cfg):
+        self.config = cfg
+
+    def upload(self, local_file, dest_dir):
+        sleep(0.1)
+
+    def connect(self):
+        pass
+
+    def disconnect(self):
+        pass

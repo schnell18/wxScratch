@@ -3,24 +3,39 @@
 import wx
 import ConfigParser
 import qrcode
-from threading import Thread
-from wx.lib.pubsub import pub
-from os.path import expanduser
-from fitness.loader import Loader
-from fitness.ftp import FtpClient
-from fitness.repo import CompositeRepo
-from fitness.tfs import TFSClient
+from threading         import Thread
+from wx.lib.pubsub     import pub
+from os.path           import expanduser
+from fitness.loader    import Loader
+from fitness.ftp       import MockFtpClient     as FtpClient
+from fitness.mockrepo  import MockCompositeRepo as CompositeRepo
+from fitness.tfs       import MockTFSClient     as TFSClient
+from fitness.exception import UserAbortError
 
 # constant definitions
+EVENT_TOTAL_CALCULATED   = 10
 EVENT_NUM_CONVERTED      = 20
 EVENT_EXCEPTION_OCCURRED = 30
 EVENT_COMPLETED          = 40
+
+SCORE_FTP_AUDIO          = 2
+SCORE_FTP_VIDEO          = 3
+SCORE_TFS_IMAGE          = 2
+SCORE_DB_OPER            = 1
 
 class ImpThread(Thread):
     def __init__(self, bundle, launcher):
         Thread.__init__(self)
         self.bundle = bundle
         self.launcher = launcher
+        self._aborted = False
+
+    def get_topic(self):
+        # to prevent message duplication on second (or greater) run
+        return 'imp_progress_topic-%d' % self.ident
+
+    def abort(self):
+        self._aborted = True
 
     def run(self):
         try:
@@ -36,28 +51,95 @@ class ImpThread(Thread):
             ftp = FtpClient(ftp_cfg)
             tfs = TFSClient(tfs_cfg)
             loader = Loader(mgr_cfg, repo, ftp, tfs)
+            self.ticks = 0
+            estimated_ticks = self.calc_ticks(self.bundle)
+            wx.CallAfter(
+                pub.sendMessage,
+                self.get_topic(),
+                msg=(
+                    EVENT_TOTAL_CALCULATED,
+                    self.launcher,
+                    estimated_ticks,
+                    u'开始导入'
+                )
+            )
             loader.load(self.bundle, self)
-        except (IOError, IndexError) as e:
+            # make sure the progress is completed
             wx.CallAfter(
                 pub.sendMessage,
-                'updateProgress',
-                msg=(EVENT_EXCEPTION_OCCURRED, self.launcher, e)
+                self.get_topic(),
+                msg=(
+                    EVENT_COMPLETED,
+                    self.launcher,
+                    estimated_ticks,
+                    u'导入完成'
+                )
             )
-            return
+        except (Exception) as e:
+            wx.CallAfter(
+                pub.sendMessage,
+                self.get_topic(),
+                msg=(EVENT_EXCEPTION_OCCURRED, self.launcher, e, '')
+            )
 
-    def update_progress(self, msg, pct):
-        if pct == 100:
-            wx.CallAfter(
-                pub.sendMessage,
-                'updateProgress',
-                msg=(EVENT_COMPLETED, self.launcher, pct)
-            )
-        else:
-            wx.CallAfter(
-                pub.sendMessage,
-                'updateProgress',
-                msg=(EVENT_NUM_CONVERTED, self.launcher, pct)
-            )
+    def update_progress(self, txt, delta):
+        if self._aborted:
+            raise UserAbortError
+        self.ticks += delta
+        wx.CallAfter(
+            pub.sendMessage,
+            self.get_topic(),
+            msg=(EVENT_NUM_CONVERTED, self.launcher, self.ticks, txt)
+        )
+
+    def calc_ticks(self, bundle):
+        ticks = 0
+
+        # calculate TFS scores
+        for curriculum in bundle.curricula:
+            ticks += SCORE_TFS_IMAGE * 2
+        for exercise in bundle.exercises:
+            if exercise.thumbnail:
+                ticks += SCORE_TFS_IMAGE
+            if exercise.illustrations:
+                for i in exercise.illustrations:
+                    if i.images:
+                        for img in i.images:
+                            ticks += SCORE_TFS_IMAGE
+
+        # calculate FTP scores
+        for lesson in bundle.lessons:
+            if lesson.bg_music:
+                ticks += SCORE_FTP_AUDIO
+            lesson_exercises = lesson.lesson_exercises
+            if lesson_exercises:
+                for le in lesson_exercises:
+                    begin_voices = le.begin_voices
+                    if begin_voices:
+                        for bv in begin_voices:
+                            ticks += SCORE_FTP_AUDIO
+                    mid_voices = le.mid_voices
+                    if mid_voices:
+                        for bv in mid_voices:
+                            ticks += SCORE_FTP_AUDIO
+        for exercise in bundle.exercises:
+            if exercise.type != 1:
+                continue
+            ticks += SCORE_FTP_VIDEO
+
+        # calcualte scores for DB persistence operations
+        for exercise in bundle.exercises:
+            ticks += SCORE_DB_OPER
+
+        # save or update all lessons
+        for lesson in bundle.lessons:
+            ticks += SCORE_DB_OPER
+
+        # save or update all curricula
+        for curriculum in bundle.curricula:
+            ticks += SCORE_DB_OPER * 2
+
+        return ticks
 
 
 class ImpDialog(wx.Dialog):
@@ -68,7 +150,7 @@ class ImpDialog(wx.Dialog):
             parent,
             id=wx.ID_ANY,
             title=wx.EmptyString,
-            size=wx.Size(450, 300),
+            size=wx.Size(580, 300),
             style=wx.DEFAULT_DIALOG_STYLE
         )
         self.bundle = bundle
@@ -76,38 +158,55 @@ class ImpDialog(wx.Dialog):
         self.Layout()
         self.Centre(wx.BOTH)
         # launcher import process
-        thread = ImpThread(bundle, self)
-        thread.start()
-        self.progressBar.SetRange(100)
-        self.progressBar.SetValue(8)
-        pub.subscribe(self.onUpdateProgress, 'updateProgress')
+        self.thread = ImpThread(bundle, self)
+        self.thread.start()
+        # self.progressBar.SetRange(100)
+        # self.progressBar.SetValue(8)
+        pub.subscribe(self.OnUpdateProgress, self.thread.get_topic())
 
-    def onUpdateProgress(self, msg):
+    def OnUpdateProgress(self, msg):
         launcher = msg[1]
         if not self == launcher:
             return
-        msg_type, data = msg[0], msg[2]
-        if msg_type == EVENT_NUM_CONVERTED:
+        msg_type, data, txt = msg[0], msg[2], msg[3]
+        if msg_type == EVENT_TOTAL_CALCULATED:
+            self.statLbl.SetLabel(txt)
+            self.progressBar.SetRange(int(data))
+        elif msg_type == EVENT_NUM_CONVERTED:
+            self.statLbl.SetLabel(txt)
             self.progressBar.SetValue(int(data))
         elif msg_type == EVENT_COMPLETED:
+            self.statLbl.SetLabel(txt)
+            self.progressBar.SetValue(int(data))
             # display qrcode image for curricula
             for i, curri in enumerate(self.bundle.curricula):
                 self.qrImages[i].SetBitmap(self.gen_qr_bitmap_for(curri))
         elif msg_type == EVENT_EXCEPTION_OCCURRED:
             e = data
-            self.progressBar.SetRange(100)
-            self.progressBar.SetValue(0)
-            self.filePicker.Enable(True)
-            if isinstance(e, IOError):
+            if not isinstance(e, UserAbortError):
                 wx.MessageBox(
                     u'导入出现异常: ' + str(e),
                     u'异常',
                     wx.OK | wx.ICON_WARNING
                 )
+            else:
+                self.Close(True)
 
     def createUI(self):
         bundle = self.bundle
         mainSizer = wx.BoxSizer(wx.VERTICAL)
+
+        # status text
+        self.statLbl = wx.StaticText(
+            self,
+            wx.ID_ANY,
+            '',
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        mainSizer.Add(self.statLbl, 0, wx.EXPAND|wx.TOP|wx.LEFT, 30)
+
         progressSizer = wx.BoxSizer(wx.HORIZONTAL)
         self.progressBar = wx.Gauge(
             self,
@@ -128,7 +227,7 @@ class ImpDialog(wx.Dialog):
         self.cancelBtn = wx.Button(
             self,
             wx.ID_ANY,
-            u"Canel",
+            u"取消",
             wx.DefaultPosition,
             wx.DefaultSize,
             0
@@ -139,33 +238,33 @@ class ImpDialog(wx.Dialog):
             wx.ALIGN_CENTER_VERTICAL|wx.ALL,
             5
         )
+        self.Bind(wx.EVT_BUTTON, self.OnCancelClicked, self.cancelBtn)
 
         mainSizer.Add(progressSizer, 1, wx.EXPAND, 5)
         curriculumNum = len(bundle.curricula)
         rows = curriculumNum / 4
         if not curriculumNum % 4 == 0:
            rows = rows + 1
-        qrSizer = wx.GridSizer(rows, 4, vgap=0, hgap=10)
+        qrSizer = wx.GridSizer(rows, 4, vgap=5, hgap=10)
 
         self.qrImages = []
-        bmp = wx.Image('qrholder.png', wx.BITMAP_TYPE_PNG).ConvertToBitmap()
+        placeholder = wx.Image(135, 135)
+        placeholder.Replace(0, 0, 0, 255, 255, 255)
         for curri in bundle.curricula:
             imgSizer = wx.BoxSizer(wx.VERTICAL)
             img = wx.StaticBitmap(
                 self,
                 wx.ID_ANY,
-                bmp,
+                placeholder.ConvertToBitmap(),
                 wx.DefaultPosition,
                 wx.DefaultSize,
                 0
             )
             imgLbl = wx.StaticText(
                 self,
-                wx.ID_ANY,
-                curri.title,
-                wx.DefaultPosition,
-                wx.DefaultSize,
-                0
+                id=wx.ID_ANY,
+                label=curri.title,
+                style=wx.ALIGN_CENTRE_HORIZONTAL
             )
             imgSizer.Add(
                 img,
@@ -190,18 +289,22 @@ class ImpDialog(wx.Dialog):
         mainSizer.Add(qrSizer, 2, wx.EXPAND, 5)
         self.SetSizer(mainSizer)
 
+    def OnCancelClicked(self, event):
+        if self.thread and self.thread.isAlive():
+            self.thread.abort()
+        else:
+            self.Close(True)
+
     def __del__(self):
         pass
 
     def gen_qr_bitmap_for(self, curriculum):
-        text = 'pajk://consult_fitnessmainpage_jump?content={"curriculumId":"%s","index":"1"}' % (curriculum.id,)
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
+        text = 'pajk://consult_fitnessmainpage_jump?content={"curriculumId":"%s","index":"1"}' % (curriculum.id if curriculum.id else 0,)
+        qr = qrcode.QRCode(version=1, box_size=3, border=4)
         qr.add_data(text)
         qr.make(fit=True)
         x = qr.make_image()
-
-        qr_file = "c%s.png" % curriculum.id
-        with open(qr_file, 'wb') as fh:
-            x.save(img_file, 'PNG')
-
-        return wx.Bitmap(qr_file, wx.BITMAP_TYPE_PNG)
+        pil = x.get_image()
+        img = wx.Image(pil.width, pil.height)
+        img.SetData(pil.convert('RGB').tobytes())
+        return img.ConvertToBitmap()
