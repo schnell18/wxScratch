@@ -3,6 +3,8 @@
 import wx
 import wx.aui
 import wx.dataview
+import wx.media
+import os.path
 
 
 class CurriculumPanel(wx.Panel):
@@ -209,6 +211,7 @@ class CurriculumPanel(wx.Panel):
         bifSizer.Add(self.iconBtn, 0, wx.ALL, 5)
         biSizer.Add(bifSizer, 1, wx.ALL|wx.EXPAND, 5)
 
+
         scrollSizer.Add(biSizer, 3, wx.ALL|wx.EXPAND, 5)
 
         lessonsSizer = wx.StaticBoxSizer(
@@ -326,7 +329,7 @@ class LessonPanel(wx.Panel):
 
         bifSizer = wx.FlexGridSizer(7, 3, 0, 0)
         bifSizer.AddGrowableCol(1)
-        bifSizer.AddGrowableRow(3)
+        # bifSizer.AddGrowableRow(3)
         bifSizer.SetFlexibleDirection(wx.BOTH)
         bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
 
@@ -414,7 +417,7 @@ class LessonPanel(wx.Panel):
             wx.ID_ANY,
             wx.EmptyString,
             wx.DefaultPosition,
-            wx.Size(-1, 60),
+            wx.Size(-1, 80),
             wx.TE_MULTILINE
         )
         bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
@@ -486,6 +489,7 @@ class LessonPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.bgmMusicText, 0, wx.ALL|wx.EXPAND, 5)
+        self.bgmMusicText.Bind(wx.EVT_TEXT, self.OnBgmChanged)
 
         self.bmgMusicBtn = wx.Button(
             biSizer.GetStaticBox(),
@@ -497,6 +501,23 @@ class LessonPanel(wx.Panel):
         )
         bifSizer.Add(self.bmgMusicBtn, 0, wx.ALL, 5)
         biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
+
+        # audio preview area
+        audioOuterSizer = wx.BoxSizer(wx.HORIZONTAL)
+        audioInnerSizer = wx.BoxSizer(wx.VERTICAL)
+        self.mediaCtrl = wx.media.MediaCtrl(
+            self,
+            wx.ID_ANY,
+            size=(200, 150),
+            style=wx.SIMPLE_BORDER
+        )
+        self.mediaCtrl.SetPlaybackRate(1)
+        self.mediaCtrl.SetVolume(1)
+        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
+        audioInnerSizer.Add(self.mediaCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTRE_HORIZONTAL, 5)
+        audioOuterSizer.Add(audioInnerSizer, 1, wx.ALIGN_CENTRE_VERTICAL, 5)
+        biSizer.Add(audioOuterSizer, 0, wx.ALL, 5)
+
         scrollSzier.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
 
         self.scrollWin.SetSizer(scrollSzier)
@@ -515,6 +536,23 @@ class LessonPanel(wx.Panel):
         self.encourageText.SetValue(model.encouragement)
         self.nextDayIntroText.SetValue(model.next_day_intro)
         self.bgmMusicText.SetValue(model.bg_music)
+
+    def OnMediaLoaded(self, evt):
+        self.mediaCtrl.Pause()
+        self.mediaCtrl.Pause()
+        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+
+    def OnBgmChanged(self, evt):
+        path = self.bgmMusicText.GetValue()
+        frame = wx.GetTopLevelParent(self)
+        fp = os.path.join(frame.bundle.path, *path.split('/'))
+        print(fp)
+        if os.path.exists(fp):
+            self.mediaCtrl.Load(fp)
+
+    def __del__(self):
+        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
+            self.mediaCtrl.Stop()
 
 
 class LessonExercisePanel(wx.Panel):
@@ -899,6 +937,7 @@ class ExercisePanel(wx.Panel):
             0
         )
         bifSizer.Add(self.videoText, 0, wx.ALL|wx.EXPAND, 5)
+        self.videoText.Bind(wx.EVT_TEXT, self.OnVideoChanged)
 
         self.videoBtn = wx.Button(
             biSizer.GetStaticBox(),
@@ -910,7 +949,24 @@ class ExercisePanel(wx.Panel):
         )
         bifSizer.Add(self.videoBtn, 0, wx.ALL, 5)
         biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
-        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
+
+        # video preview area
+        videoOuterSizer = wx.BoxSizer(wx.HORIZONTAL)
+        videoInnerSizer = wx.BoxSizer(wx.VERTICAL)
+        self.mediaCtrl = wx.media.MediaCtrl(
+            self,
+            wx.ID_ANY,
+            size=(300, 200),
+            style=wx.SIMPLE_BORDER
+        )
+        self.mediaCtrl.SetPlaybackRate(1)
+        self.mediaCtrl.SetVolume(1)
+        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
+        videoInnerSizer.Add(self.mediaCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTRE_HORIZONTAL, 25)
+        videoOuterSizer.Add(videoInnerSizer, 1, wx.ALIGN_CENTRE_VERTICAL, 5)
+        biSizer.Add(videoOuterSizer, 0, wx.ALL, 5)
+
+        scrollSizer.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
         scrollSizer.Fit(self.scrollWin)
@@ -929,6 +985,22 @@ class ExercisePanel(wx.Panel):
         self.durationSpin.SetValue(model.duration)
         self.thumbnailText.SetValue(model.thumbnail)
         self.videoText.SetValue(model.video_name)
+
+    def OnMediaLoaded(self, evt):
+        self.mediaCtrl.Pause()
+        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+
+    def OnVideoChanged(self, evt):
+        path = self.videoText.GetValue()
+        frame = wx.GetTopLevelParent(self)
+        fp = os.path.join(frame.bundle.path, *path.split('/'))
+        print(fp)
+        if os.path.exists(fp):
+            self.mediaCtrl.Load(fp)
+
+    def __del__(self):
+        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
+            self.mediaCtrl.Stop()
 
 
 class IllustrationPanel(wx.Panel):

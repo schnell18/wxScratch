@@ -7,9 +7,9 @@ from threading         import Thread
 from wx.lib.pubsub     import pub
 from os.path           import expanduser
 from fitness.loader    import Loader
-from fitness.ftp       import MockFtpClient     as FtpClient
-from fitness.mockrepo  import MockCompositeRepo as CompositeRepo
-from fitness.tfs       import MockTFSClient     as TFSClient
+from fitness.ftp       import FtpClient
+from fitness.repo      import CompositeRepo
+from fitness.tfs       import TFSClient
 from fitness.exception import UserAbortError
 
 # constant definitions
@@ -177,6 +177,7 @@ class ImpDialog(wx.Dialog):
             self.progressBar.SetValue(int(data))
         elif msg_type == EVENT_COMPLETED:
             self.statLbl.SetLabel(txt)
+            self.cancelBtn.SetLabel(u"关闭")
             self.progressBar.SetValue(int(data))
             # display qrcode image for curricula
             for i, curri in enumerate(self.bundle.curricula):

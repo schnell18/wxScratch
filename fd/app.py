@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import ConfigParser
@@ -152,16 +153,6 @@ class FtFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, handler, tool)
 
     def toolbarData(self):
-        # return (
-        #     ("New", "new.png", u"创建新的课程包", self.OnNew),
-        #     ("Open", "open.png", u"打开课程包", self.OnOpen),
-        #     ("Save", "save.png", u"保存课程包", self.OnSave),
-        #     ("", "", "", ""),
-        #     ("Add", "add.png", u"新增", self.OnAdd),
-        #     ("Remove", "remove.png", u"删除", self.OnRemove),
-        #     ("", "", "", ""),
-        #     ("Upload", "upload.png", u"上传", self.OnImport),
-        # )
         return (
             (u"新建", "new.png", u"创建新的课程包", self.OnNew),
             (u"打开", "open.png", u"打开课程包", self.OnOpen),
@@ -172,9 +163,6 @@ class FtFrame(wx.Frame):
             ("", "", "", ""),
             (u"导入", "upload.png", u"导入课程包", self.OnImport),
         )
-
-    def toolbarColorData(self):
-        return ("Black", "Red", "Green", "Blue")
 
     def createToolBar(self):
         self.toolbar = self.CreateToolBar(wx.TB_TEXT)
@@ -268,17 +256,12 @@ class FtFrame(wx.Frame):
         dlg.ShowModal()
         dlg.Destroy()
 
-    def OnColor(self, event):
-        pass
-
     def OnAbout(self, event):
         pass
 
-    def OnOtherColor(self, event):
-        pass
-
     def OnCloseWindow(self, event):
-        pass
+        # TODO: prompt save if content is dirty
+        self.Close()
 
     def loadTree(self, bundle):
         rootId = self.rootId
