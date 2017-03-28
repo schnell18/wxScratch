@@ -8,9 +8,111 @@ import os.path
 import re
 
 
-class CurriculumPanel(wx.Panel):
+class BasePanel(wx.Panel):
+    def __init__(self, parent, model, **kwargs):
+        wx.Panel.__init__(self, parent, **kwargs)
+        self.dirty=False
+        self.model=model
+
+    def MarkDirty(self):
+        self.dirty=True
+
+    def IsDirty(self):
+        return self.dirty
+
+    def SaveModel(self):
+        # to be override in subclass
+        pass
+
+
+class ImagePreviewPanel(wx.Panel):
+    def __init__(self, parent, width=300, height=200):
+        wx.Panel.__init__(self, parent)
+
+        self.width = width
+        self.height = height
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        # image preview area
+        placeholder = wx.Image(width, height)
+        placeholder.Replace(0, 0, 0, 255, 255, 255)
+        self.imgCtrl = wx.StaticBitmap(
+            self,
+            wx.ID_ANY,
+            placeholder.ConvertToBitmap()
+        )
+
+        mainSizer.Add(self.imgCtrl, 1, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        self.captionLbl = wx.StaticText(self, wx.ID_ANY, "")
+        self.captionLbl.Wrap(-1)
+        mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        self.SetSizerAndFit(mainSizer)
+
+    def Load(self, path):
+        if os.path.exists(path):
+            bmp = wx.Bitmap(path)
+            (width, height) = (bmp.GetWidth(), bmp.GetHeight())
+            # scale to fit
+            self.imgCtrl.SetBitmap(self._scale_to_fit(bmp))
+            txt = u"宽高 %d X %d" % (width, height)
+            self.captionLbl.SetLabel(txt)
+
+    def _scale_to_fit(self, bmp):
+        (width, height) = (bmp.GetWidth(), bmp.GetHeight())
+        factor = max(width / self.width, height / self.height)
+        if factor > 1:
+            img = bmp.ConvertToImage()
+            img.Rescale(self.width / factor, self.height / factor)
+            bmp = wx.Bitmap(img)
+        return bmp
+
+    def __del__(self):
+        pass
+
+
+class AvPreviewPanel(wx.Panel):
+    def __init__(self, parent, width=300, height=200):
+        wx.Panel.__init__(self, parent)
+
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        self.mediaCtrl = wx.media.MediaCtrl(
+            self,
+            wx.ID_ANY,
+            size=(width, height),
+            style=wx.SIMPLE_BORDER
+        )
+        self.mediaCtrl.SetPlaybackRate(1)
+        self.mediaCtrl.SetVolume(1)
+        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
+        mainSizer.Add(self.mediaCtrl, 1, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        self.captionLbl = wx.StaticText(self, wx.ID_ANY, "")
+        self.captionLbl.Wrap(-1)
+        mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        self.SetSizerAndFit(mainSizer)
+
+    def Load(self, path):
+        if os.path.exists(path):
+            self.mediaCtrl.Load(path)
+
+    def OnMediaLoaded(self, evt):
+        self.mediaCtrl.Pause()
+        txt = self._formatDuration(self.mediaCtrl.Length())
+        self.captionLbl.SetLabel(txt)
+        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+
+    def _formatDuration(self, milli_seconds):
+        seconds = milli_seconds / 1000 % 60
+        mins = milli_seconds / 1000 / 60 % 60
+        hours = milli_seconds / 1000 / 3600 % 60
+        return u"时长 %02d:%02d:%02d" % (hours, mins, seconds)
+
+    def __del__(self):
+        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
+            self.mediaCtrl.Stop()
+
+
+class CurriculumPanel(BasePanel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -277,11 +379,11 @@ class CurriculumPanel(wx.Panel):
         self.scrollWin.SetSizer(scrollSizer)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
         self.SetSizer(panelSizer)
-        self.SetModel(model)
+        self.LoadModel()
         self.Layout()
 
-    def SetModel(self, model):
-        self.model = model
+    def LoadModel(self):
+        model = self.model
         self.refNoText.SetValue(
             model.ref_no if model.ref_no else ''
         )
@@ -316,6 +418,18 @@ class CurriculumPanel(wx.Panel):
                 row = [curr.ref_no, curr.title, curr.cover]
                 self.dvRelated.AppendItem(row)
 
+    def SaveModel(self):
+        model = self.model
+        model.ref_no = self.refNoText.GetValue()
+        model.title = self.titleText.GetValue()
+        model.description = self.descriptionText.GetValue()
+        model.corner_label_type = self.cornerTypeChoice.GetSelection()
+        model.preview_video = self.previewVideoText.GetValue()
+        model.cover = self.coverText.GetValue()
+        model.icon = self.iconText.GetValue()
+        # TODO: assembly curriculum lessons
+        # TODO: assembly next curriculua
+
     def OnMediaLoaded(self, evt):
         self.mediaCtrl.Pause()
         self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
@@ -330,10 +444,9 @@ class CurriculumPanel(wx.Panel):
             self.mediaCtrl.Stop()
 
 
-
-class LessonPanel(wx.Panel):
+class LessonPanel(BasePanel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -343,7 +456,7 @@ class LessonPanel(wx.Panel):
         )
         self.scrollWin.SetScrollRate(5, 5)
         panelSizer = wx.BoxSizer(wx.HORIZONTAL)
-        scrollSzier = wx.BoxSizer(wx.VERTICAL)
+        scrollSizer = wx.BoxSizer(wx.VERTICAL)
 
         biSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -529,33 +642,33 @@ class LessonPanel(wx.Panel):
         bifSizer.Add(self.bmgMusicBtn, 0, wx.ALL, 5)
         biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
 
-        # audio preview area
-        audioOuterSizer = wx.BoxSizer(wx.HORIZONTAL)
-        audioInnerSizer = wx.BoxSizer(wx.VERTICAL)
-        self.mediaCtrl = wx.media.MediaCtrl(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            size=(200, 150),
-            style=wx.SIMPLE_BORDER
+        prSizer = wx.StaticBoxSizer(
+            wx.StaticBox(
+                self.scrollWin,
+                wx.ID_ANY,
+                u"预览"
+            ),
+            wx.HORIZONTAL
         )
-        self.mediaCtrl.SetPlaybackRate(1)
-        self.mediaCtrl.SetVolume(1)
-        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
-        audioInnerSizer.Add(self.mediaCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTRE_HORIZONTAL, 5)
-        audioOuterSizer.Add(audioInnerSizer, 1, wx.ALIGN_CENTRE_VERTICAL, 5)
-        biSizer.Add(audioOuterSizer, 0, wx.ALL, 5)
 
-        scrollSzier.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
+        vSizer = wx.BoxSizer(wx.VERTICAL)
+        # audio preview area
+        self.prAudio = AvPreviewPanel(prSizer.GetStaticBox())
+        vSizer.Add(self.prAudio, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        prSizer.Add(vSizer, 0, wx.ALL, 5)
 
-        self.scrollWin.SetSizer(scrollSzier)
+        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(prSizer, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
-        scrollSzier.Fit(self.scrollWin)
+        scrollSizer.Fit(self.scrollWin)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
-        self.SetModel(model)
+        self.LoadModel()
         self.SetSizer(panelSizer)
 
-    def SetModel(self, model):
-        self.model = model
+    def LoadModel(self):
+        model = self.model
         self.refNoText.SetValue(model.ref_no)
         self.typeChoice.SetSelection(model.type - 1)
         self.titleText.SetValue(model.title)
@@ -564,26 +677,30 @@ class LessonPanel(wx.Panel):
         self.nextDayIntroText.SetValue(model.next_day_intro)
         self.bgmMusicText.SetValue(model.bg_music)
 
-    def OnMediaLoaded(self, evt):
-        self.mediaCtrl.Pause()
-        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+    def SaveModel(self):
+        model = self.model
+        model.ref_no = self.refNoText.GetValue()
+        model.type = self.typeChoice.GetSelection() + 1
+        model.title = self.titleText.GetValue()
+        model.description = self.descriptionText.GetValue()
+        model.encouragement = self.encourageText.GetValue()
+        model.next_day_intro = self.nextDayIntroText.GetValue()
+        model.bg_music = self.bgmMusicText.GetValue()
 
     def OnBgmChanged(self, evt):
         path = self.bgmMusicText.GetValue()
         frame = wx.GetTopLevelParent(self)
         fp = os.path.join(frame.bundle.path, *path.split('/'))
-        print(fp)
-        if os.path.exists(fp):
-            self.mediaCtrl.Load(fp)
+        self.prAudio.Load(fp)
 
     def __del__(self):
         if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
             self.mediaCtrl.Stop()
 
 
-class LessonExercisePanel(wx.Panel):
+class LessonExercisePanel(BasePanel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -593,7 +710,7 @@ class LessonExercisePanel(wx.Panel):
         )
         self.scrollWin.SetScrollRate(5, 5)
         panelSizer = wx.BoxSizer(wx.HORIZONTAL)
-        scrollSzier = wx.BoxSizer(wx.VERTICAL)
+        scrollSizer = wx.BoxSizer(wx.VERTICAL)
 
         biSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -604,9 +721,8 @@ class LessonExercisePanel(wx.Panel):
             wx.VERTICAL
         )
 
-        bifSizer = wx.FlexGridSizer(5, 3, 0, 0)
+        bifSizer = wx.FlexGridSizer(0, 3, hgap=4, vgap=4)
         bifSizer.AddGrowableCol(1)
-        bifSizer.AddGrowableRow(3)
         bifSizer.SetFlexibleDirection(wx.BOTH)
         bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
 
@@ -623,14 +739,10 @@ class LessonExercisePanel(wx.Panel):
 
         self.refNoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            id=wx.ID_ANY
         )
         bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
+        bifSizer.AddSpacer(100)
 
         self.repetitionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -645,15 +757,11 @@ class LessonExercisePanel(wx.Panel):
 
         self.repetitionSpin = wx.SpinCtrl(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0,
+            id=wx.ID_ANY,
             max=100
         )
         bifSizer.Add(self.repetitionSpin, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(100)
+        bifSizer.AddSpacer(1)
 
         self.measureLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -678,8 +786,8 @@ class LessonExercisePanel(wx.Panel):
         self.measureChoice.SetSelection(0)
         bifSizer.Add(self.measureChoice, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(1)
-        biSizer.Add(bifSizer, 1, wx.EXPAND | wx.ALL, 5)
-        scrollSzier.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
+        biSizer.Add(bifSizer, 0, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
 
         bvSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -699,7 +807,7 @@ class LessonExercisePanel(wx.Panel):
         )
         self.beginVoices.AppendTextColumn(u"音频")
         bvSizer.Add(self.beginVoices, 1, wx.ALL|wx.EXPAND, 5)
-        scrollSzier.Add(bvSizer, 1, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(bvSizer, 1, wx.EXPAND | wx.ALL, 5)
 
         mdSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -720,18 +828,16 @@ class LessonExercisePanel(wx.Panel):
         self.midVoices.AppendTextColumn(u"位置")
         self.midVoices.AppendTextColumn(u"音频")
         mdSizer.Add(self.midVoices, 1, wx.ALL|wx.EXPAND, 5)
+        scrollSizer.Add(mdSizer, 1, wx.EXPAND | wx.ALL, 5)
 
-        scrollSzier.Add(mdSizer, 1, wx.EXPAND | wx.ALL, 5)
-
-        self.scrollWin.SetSizer(scrollSzier)
+        self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
-        scrollSzier.Fit(self.scrollWin)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
-        self.SetModel(model)
+        self.LoadModel()
         self.SetSizer(panelSizer)
 
-    def SetModel(self, model):
-        self.model = model
+    def LoadModel(self):
+        model = self.model
         self.refNoText.SetValue(model.exercise_ref)
         self.measureChoice.SetSelection(model.measure - 1)
         self.repetitionSpin.SetValue(model.repetition)
@@ -746,10 +852,26 @@ class LessonExercisePanel(wx.Panel):
             row = [bv.position, bv.audio_name]
             self.midVoices.AppendItem(row)
 
+    def SaveModel(self):
+        model = self.model
+        model.exercise_ref = self.refNoText.GetValue()
+        model.measure = self.measureChoice.GetSelection() + 1
+        model.repetition = self.repetitionGpin.GetValue()
 
-class ExercisePanel(wx.Panel):
+        # TODO: save begin voices
+        for bv in sorted(model.begin_voices, key=lambda e : e.position):
+            row = [bv.audio_name]
+            self.beginVoices.AppendItem(row)
+
+        # TODO: save mid voices
+        for bv in model.mid_voices:
+            row = [bv.position, bv.audio_name]
+            self.midVoices.AppendItem(row)
+
+
+class ExercisePanel(BasePanel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -931,6 +1053,7 @@ class ExercisePanel(wx.Panel):
             0
         )
         bifSizer.Add(self.thumbnailText, 0, wx.ALL|wx.EXPAND, 5)
+        self.thumbnailText.Bind(wx.EVT_TEXT, self.OnThumbnailChanged)
 
         self.thumbnailBtn = wx.Button(
             biSizer.GetStaticBox(),
@@ -953,38 +1076,55 @@ class ExercisePanel(wx.Panel):
         self.videoLabel.Wrap(-1)
         bifSizer.Add(self.videoLabel, 0, wx.ALL, 5)
 
-        self.videoText = wx.FilePickerCtrl(
+        self.videoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
-            id=wx.ID_ANY,
-            message=u"请选择视频文件"
+            id=wx.ID_ANY
         )
         bifSizer.Add(self.videoText, 0, wx.ALL|wx.EXPAND, 5)
-        self.videoText.Bind(wx.EVT_FILEPICKER_CHANGED, self.OnVideoChanged)
+        self.videoText.Bind(wx.EVT_TEXT, self.OnVideoChanged)
 
-        # video preview area
-        self.mediaCtrl = wx.media.MediaCtrl(
+        self.videoBtn = wx.Button(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
-            size=(150, 100),
-            style=wx.SIMPLE_BORDER
+            u"浏览",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
         )
-        self.mediaCtrl.SetPlaybackRate(1)
-        self.mediaCtrl.SetVolume(1)
-        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
-        bifSizer.Add(self.mediaCtrl, 0, wx.ALL, 5)
-
+        bifSizer.Add(self.videoBtn, 0, wx.ALL, 5)
         biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
-        scrollSizer.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
+
+        prSizer = wx.StaticBoxSizer(
+            wx.StaticBox(
+                self.scrollWin,
+                wx.ID_ANY,
+                u"预览"
+            ),
+            wx.HORIZONTAL
+        )
+
+        gSizer = wx.GridSizer(1, 2, hgap=4, vgap=4)
+        # image preview area
+        self.prImg = ImagePreviewPanel(prSizer.GetStaticBox())
+        gSizer.Add(self.prImg, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+        # video preview area
+        self.prVideo = AvPreviewPanel(prSizer.GetStaticBox())
+        gSizer.Add(self.prVideo, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+
+        prSizer.Add(gSizer, 0, wx.ALL, 5)
+
+        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(prSizer, 1, wx.EXPAND | wx.ALL, 5)
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
         scrollSizer.Fit(self.scrollWin)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
         self.SetSizer(panelSizer)
-        self.SetModel(model)
+        self.LoadModel()
         self.Layout()
 
-    def SetModel(self, model):
-        self.model = model
+    def LoadModel(self):
+        model = self.model
         self.exerciseRefNoText.SetValue(model.ref_no)
         self.typeChoice.SetSelection(model.type - 1)
         self.nameText.SetValue(model.action)
@@ -992,28 +1132,38 @@ class ExercisePanel(wx.Panel):
         self.caloriesSpin.SetValue(model.calories)
         self.durationSpin.SetValue(model.duration)
         self.thumbnailText.SetValue(model.thumbnail)
-        frame = wx.GetTopLevelParent(self)
-        fp = os.path.join(frame.bundle.path, *model.video_name.split('/'))
-        self.videoText.SetPath(fp)
+        self.videoText.SetValue(model.video_name)
 
-    def OnMediaLoaded(self, evt):
-        self.mediaCtrl.Pause()
-        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+    def SaveModel(self):
+        model = self.model
+        model.ref_no = self.exerciseRefNoText.GetValue()
+        model.type = self.typeChoice.GetSelection() + 1
+        model.action = self.nameText.GetValue()
+        model.title = self.titleText.GetValue()
+        model.calories = self.caloriesSpin.GetValue()
+        model.duration = self.durationSpin.SetValue()
+        model.thumbnail = self.thumbnailText.GetValue()
+        model.video_name = self.videoText.GetValue()
+
+    def OnThumbnailChanged(self, evt):
+        path = self.thumbnailText.GetValue()
+        frame = wx.GetTopLevelParent(self)
+        fp = os.path.join(frame.bundle.path, *path.split('/'))
+        self.prImg.Load(fp)
 
     def OnVideoChanged(self, evt):
-        fp = self.videoText.GetPath()
-        print(fp)
-        if os.path.exists(fp):
-            self.mediaCtrl.Load(fp)
+        path = self.videoText.GetValue()
+        frame = wx.GetTopLevelParent(self)
+        fp = os.path.join(frame.bundle.path, *path.split('/'))
+        self.prVideo.Load(fp)
 
     def __del__(self):
-        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
-            self.mediaCtrl.Stop()
+        pass
 
 
-class IllustrationPanel(wx.Panel):
+class IllustrationPanel(BasePanel):
     def __init__(self, parent, model):
-        wx.Panel.__init__(self, parent, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -1083,19 +1233,54 @@ class IllustrationPanel(wx.Panel):
         bifSizer.Add(self.illuDescriptionText, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(1)
         illuSizer.Add(bifSizer, 1, wx.EXPAND, 5)
+
+        self.prSizer = wx.StaticBoxSizer(
+            wx.StaticBox(
+                self.scrollWin,
+                wx.ID_ANY,
+                u"详解图预览"
+            ),
+            wx.VERTICAL
+        )
+
+        self.gSizer = wx.GridSizer(1, 4, hgap=4, vgap=4)
+
         scrollSizer.Add(illuSizer, 0, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(self.prSizer, 1, wx.EXPAND | wx.ALL, 5)
 
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
         scrollSizer.Fit(self.scrollWin)
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
         self.SetSizer(panelSizer)
-        self.SetModel(model)
+        self.LoadModel()
         self.Layout()
 
-    def SetModel(self, model):
-        self.model = model
+    def LoadModel(self):
+        model = self.model
         self.illuTitleText.SetValue(model.title)
         self.illuDescriptionText.SetValue(model.description)
+        self._layout_images()
+
+    def SaveModel(self):
+        model = self.model
+        model.title = self.illuTitleText.GetValue()
+        model.description = self.illuDescriptionText.GetValue()
+        # TODO: save images
+
+    def _layout_images(self):
+        if self.model.images:
+            self.gSizer.Clear(delete_windows=True)
+            frame = wx.GetTopLevelParent(self)
+            for path in self.model.images:
+                fp = os.path.join(frame.bundle.path, *path.split('/'))
+                if os.path.exists(fp):
+                    prImage = ImagePreviewPanel(
+                        self.prSizer.GetStaticBox(),
+                        width=500,
+                        height=300
+                    )
+                    prImage.Load(fp)
+                    self.gSizer.Add(prImage, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
 
 

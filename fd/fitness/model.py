@@ -101,6 +101,7 @@ class Exercise:
 
 class LessonExercise:
     def __init__(self, **kwargs):
+        self.title = kwargs.get("title")
         self.exercise_ref = kwargs.get("exercise_ref")
         self.repetition = kwargs.get("repetition")
         self.measure = kwargs.get("measure")

@@ -26,6 +26,22 @@ class Parser:
         self.cfg = cfg
         self.repo = repo
 
+    def save_bundle(self, bundle):
+        # save curriculum.yml
+        fp = os.path.join(bundle.path, 'META-INF', 'curriculum.yml.new')
+        with open(fp, 'w') as cf:
+            yaml.dump(bundle.curricula, cf, default_flow_style=False)
+
+        # save lesson.yml
+        fp = os.path.join(bundle.path, 'META-INF', 'lesson.yml.new')
+        with open(fp, 'w') as lf:
+            yaml.dump(bundle.lessons, lf, default_flow_style=False)
+
+        # save exercise.yml
+        fp = os.path.join(bundle.path, 'META-INF', 'exercise.yml.new')
+        with open(fp, 'w') as ef:
+            yaml.dump(bundle.exercises, ef, default_flow_style=False)
+
     def parse_bundle(self, path):
         if not os.path.isdir(path):
             raise ValueError("Invalid curriculum bundle at: " + path)
@@ -206,6 +222,7 @@ class Parser:
 
                 lesson_exercise_objs.append(
                     LessonExercise(
+                        title=exercise_obj.title,
                         exercise_ref=exercise['exerciseRef'],
                         repetition=exercise['repetition'],
                         measure=exercise['measure'],

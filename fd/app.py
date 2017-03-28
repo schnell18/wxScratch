@@ -4,6 +4,7 @@
 import ConfigParser
 import wx
 import wx.aui
+from fitness.uilib import BasePanel
 from fitness.uilib import IllustrationPanel
 from fitness.uilib import ExercisePanel
 from fitness.uilib import LessonPanel
@@ -11,12 +12,14 @@ from fitness.uilib import LessonExercisePanel
 from fitness.uilib import CurriculumPanel
 from fitness.imp import ImpDialog
 from fitness.parser import Parser
+from fitness.model import Bundle
 from fitness.model import Curriculum
 from fitness.model import Lesson
 from fitness.model import LessonExercise
 from fitness.model import Exercise
 from fitness.model import Illustration
 from os.path import expanduser
+from datetime import datetime
 
 
 class FtFrame(wx.Frame):
@@ -63,7 +66,7 @@ class FtFrame(wx.Frame):
     def createStatusBar(self):
         self.statusbar = self.CreateStatusBar()
         self.statusbar.SetFieldsCount(3)
-        self.statusbar.SetStatusWidths([-1, -2, -3])
+        self.statusbar.SetStatusWidths([-3, -2, -2])
 
     def createMenuBar(self):
         menuBar = wx.MenuBar()
@@ -123,7 +126,11 @@ class FtFrame(wx.Frame):
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
 
         self.tree.AssignImageList(self.imageList)
-        self.rootId = self.tree.AddRoot(u"课程包", 0)
+        self.treeRootId = self.tree.AddRoot(u"课程包", 0)
+        rootId = self.treeRootId
+        self.treeCurrId = self.tree.AppendItem(rootId, u"课程", 1)
+        self.treeLessonId = self.tree.AppendItem(rootId, u"子课", 2)
+        self.treeExerciseId = self.tree.AppendItem(rootId, u"动作", 3)
 
         bSizer3.Add(self.tree, 3, wx.EXPAND|wx.RIGHT, 5)
         scrollWin.SetSizer(bSizer3)
@@ -187,7 +194,7 @@ class FtFrame(wx.Frame):
                 notebook.AddPage(lesson, data.title, True, 2)
             elif isinstance(data, LessonExercise):
                 le = LessonExercisePanel(notebook, data)
-                notebook.AddPage(le, data.exercise_ref, True, 5)
+                notebook.AddPage(le, data.title, True, 5)
             elif isinstance(data, Exercise):
                 exercise = ExercisePanel(notebook, data)
                 notebook.AddPage(exercise, data.action, True, 3)
@@ -206,24 +213,53 @@ class FtFrame(wx.Frame):
             message=u"请选择课程包目录"
         )
         if dlg.ShowModal() == wx.ID_OK:
-            config = ConfigParser.RawConfigParser()
-            config.read(expanduser('~/.fitness/config.ini'))
-            db_cfg = {t[0]: t[1] for t in config.items('mysql')}
-            db_cfg['raise_on_warnings'] = True
-            mgr_cfg = {t[0]: t[1] for t in config.items('general')}
-            parser = Parser(mgr_cfg, db_cfg)
+            parser = self.getParser()
             self.bundle = parser.parse_bundle(dlg.GetPath())
             self.loadTree(self.bundle)
             self.statusbar.SetStatusText(dlg.GetPath(), 2)
         dlg.Destroy()
 
     def OnSave(self, event):
-        pass
+        notebook = self.right
+        # walk through all dirty pages and save
+        for i in range(notebook.GetPageCount()):
+            panel = notebook.GetPage(i)
+            if isinstance(panel, BasePanel) and panel.IsDirty():
+                panel.SaveModel()
+
+        bundle = Bundle(path=self.bundle.path, data=None)
+        # walk through tree and save yml files
+        bundle.curricula = self.getChildren(self.tree, self.treeCurrId)
+        bundle.lessons = self.getChildren(self.tree, self.treeLessonId)
+        bundle.exercises = self.getChildren(self.tree, self.treeExerciseId)
+        parser = self.getParser()
+        parser.save_bundle(bundle)
+        self.statusbar.SetStatusText(u"课程包已保存", 0)
+        self.statusbar.SetStatusText(u"最近一次保存于" + self.getTimestamp(), 1)
+
+    def getTimestamp(self):
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    def getChildren(self, tree, parent):
+          result = []
+          item, cookie = tree.GetFirstChild(parent)
+          while item:
+              result.append(tree.GetItemData(item))
+              item, cookie = tree.GetNextChild(parent, cookie)
+          return result
+
+    def getParser(self):
+        config = ConfigParser.RawConfigParser()
+        config.read(expanduser('~/.fitness/config.ini'))
+        db_cfg = {t[0]: t[1] for t in config.items('mysql')}
+        db_cfg['raise_on_warnings'] = True
+        mgr_cfg = {t[0]: t[1] for t in config.items('general')}
+        return Parser(mgr_cfg, db_cfg)
 
     def OnAdd(self, event):
         treeItemId = self.tree.GetFocusedItem()
         print treeItemId.IsOk()
-        if treeItemId.IsOk() and not treeItemId == self.rootId:
+        if treeItemId.IsOk() and not treeItemId == self.treeRootId:
             data = self.tree.GetItemData(treeItemId)
             if isinstance(data, Curriculum):
                 newTreeItemId = self.tree.InsertItem(
@@ -241,7 +277,7 @@ class FtFrame(wx.Frame):
 
     def OnRemove(self, event):
         treeItemId = self.tree.GetFocusedItem()
-        if treeItemId.IsOk() and not treeItemId == self.rootId:
+        if self.CanDelete(treeItemId):
             data = self.tree.GetItemData(treeItemId)
             self.tree.Delete(treeItemId)
             notebook = self.right
@@ -250,6 +286,9 @@ class FtFrame(wx.Frame):
                 pageIndex = notebook.GetPageIndex(page)
                 if pageIndex >= 0:
                     notebook.DeletePage(pageIndex)
+
+    def CanDelete(self, treeItemId):
+        return treeItemId.IsOk() and treeItemId != self.treeRootId and treeItemId != self.treeCurrId and treeItemId != self.treeLessonId and treeItemId != self.treeExerciseId
 
     def OnImport(self, event):
         dlg = ImpDialog(self, self.bundle)
@@ -264,10 +303,10 @@ class FtFrame(wx.Frame):
         self.Close()
 
     def loadTree(self, bundle):
-        rootId = self.rootId
-        currId = self.tree.AppendItem(rootId, u"课程", 1)
-        lessonId = self.tree.AppendItem(rootId, u"子课", 2)
-        exerciseId = self.tree.AppendItem(rootId, u"动作", 3)
+        rootId = self.treeRootId
+        currId = self.treeCurrId
+        lessonId = self.treeLessonId
+        exerciseId = self.treeExerciseId
         for c in bundle.curricula:
             treeItemId = self.tree.AppendItem(currId, text=c.title, image=1)
             self.tree.SetItemData(treeItemId, c)
@@ -275,7 +314,7 @@ class FtFrame(wx.Frame):
             treeItemId = self.tree.AppendItem(lessonId, l.title, 2)
             self.tree.SetItemData(treeItemId, l)
             for seq, le in enumerate(l.lesson_exercises, 1):
-                leItemId = self.tree.AppendItem(treeItemId, le.exercise_ref, 5)
+                leItemId = self.tree.AppendItem(treeItemId, le.title, 5)
                 le.ui_ref_no = le.exercise_ref + '-' + str(seq)
                 self.tree.SetItemData(leItemId, le)
         for e in bundle.exercises:
@@ -285,7 +324,10 @@ class FtFrame(wx.Frame):
                 illuItemId = self.tree.AppendItem(treeItemId, i.title, 4)
                 i.ui_ref_no = e.ref_no + '-' + str(seq)
                 self.tree.SetItemData(illuItemId, i)
-        self.tree.ExpandAll()
+        self.tree.Expand(rootId)
+        self.tree.Expand(currId)
+        self.tree.Expand(lessonId)
+        self.tree.Expand(exerciseId)
         self.tree.EnsureVisible(rootId)
 
 
