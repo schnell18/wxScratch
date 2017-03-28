@@ -5,6 +5,7 @@ import wx.aui
 import wx.dataview
 import wx.media
 import os.path
+import re
 
 
 class CurriculumPanel(wx.Panel):
@@ -146,7 +147,19 @@ class CurriculumPanel(wx.Panel):
             0
         )
         bifSizer.Add(self.previewVideoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
+        self.previewVideoText.Bind(wx.EVT_TEXT, self.OnVideoChanged)
+
+        # video preview area
+        self.mediaCtrl = wx.media.MediaCtrl(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            size=(150, 100),
+            style=wx.SIMPLE_BORDER
+        )
+        self.mediaCtrl.SetPlaybackRate(1)
+        self.mediaCtrl.SetVolume(1)
+        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
+        bifSizer.Add(self.mediaCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL, 5)
 
         self.coverLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -302,6 +315,20 @@ class CurriculumPanel(wx.Panel):
             for curr in model.next_curricula:
                 row = [curr.ref_no, curr.title, curr.cover]
                 self.dvRelated.AppendItem(row)
+
+    def OnMediaLoaded(self, evt):
+        self.mediaCtrl.Pause()
+        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+
+    def OnVideoChanged(self, evt):
+        url = self.previewVideoText.GetValue()
+        if re.match('^http(s)?://', url):
+            self.mediaCtrl.LoadURI(url)
+
+    def __del__(self):
+        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
+            self.mediaCtrl.Stop()
+
 
 
 class LessonPanel(wx.Panel):
@@ -506,7 +533,7 @@ class LessonPanel(wx.Panel):
         audioOuterSizer = wx.BoxSizer(wx.HORIZONTAL)
         audioInnerSizer = wx.BoxSizer(wx.VERTICAL)
         self.mediaCtrl = wx.media.MediaCtrl(
-            self,
+            biSizer.GetStaticBox(),
             wx.ID_ANY,
             size=(200, 150),
             style=wx.SIMPLE_BORDER
@@ -538,7 +565,6 @@ class LessonPanel(wx.Panel):
         self.bgmMusicText.SetValue(model.bg_music)
 
     def OnMediaLoaded(self, evt):
-        self.mediaCtrl.Pause()
         self.mediaCtrl.Pause()
         self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
@@ -719,7 +745,6 @@ class LessonExercisePanel(wx.Panel):
         for bv in model.mid_voices:
             row = [bv.position, bv.audio_name]
             self.midVoices.AppendItem(row)
-
 
 
 class ExercisePanel(wx.Panel):
@@ -928,44 +953,27 @@ class ExercisePanel(wx.Panel):
         self.videoLabel.Wrap(-1)
         bifSizer.Add(self.videoLabel, 0, wx.ALL, 5)
 
-        self.videoText = wx.TextCtrl(
+        self.videoText = wx.FilePickerCtrl(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            id=wx.ID_ANY,
+            message=u"请选择视频文件"
         )
         bifSizer.Add(self.videoText, 0, wx.ALL|wx.EXPAND, 5)
-        self.videoText.Bind(wx.EVT_TEXT, self.OnVideoChanged)
-
-        self.videoBtn = wx.Button(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            u"浏览",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.videoBtn, 0, wx.ALL, 5)
-        biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
+        self.videoText.Bind(wx.EVT_FILEPICKER_CHANGED, self.OnVideoChanged)
 
         # video preview area
-        videoOuterSizer = wx.BoxSizer(wx.HORIZONTAL)
-        videoInnerSizer = wx.BoxSizer(wx.VERTICAL)
         self.mediaCtrl = wx.media.MediaCtrl(
-            self,
+            biSizer.GetStaticBox(),
             wx.ID_ANY,
-            size=(300, 200),
+            size=(150, 100),
             style=wx.SIMPLE_BORDER
         )
         self.mediaCtrl.SetPlaybackRate(1)
         self.mediaCtrl.SetVolume(1)
         self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
-        videoInnerSizer.Add(self.mediaCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTRE_HORIZONTAL, 25)
-        videoOuterSizer.Add(videoInnerSizer, 1, wx.ALIGN_CENTRE_VERTICAL, 5)
-        biSizer.Add(videoOuterSizer, 0, wx.ALL, 5)
+        bifSizer.Add(self.mediaCtrl, 0, wx.ALL, 5)
 
+        biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
         scrollSizer.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
@@ -984,16 +992,16 @@ class ExercisePanel(wx.Panel):
         self.caloriesSpin.SetValue(model.calories)
         self.durationSpin.SetValue(model.duration)
         self.thumbnailText.SetValue(model.thumbnail)
-        self.videoText.SetValue(model.video_name)
+        frame = wx.GetTopLevelParent(self)
+        fp = os.path.join(frame.bundle.path, *model.video_name.split('/'))
+        self.videoText.SetPath(fp)
 
     def OnMediaLoaded(self, evt):
         self.mediaCtrl.Pause()
         self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
     def OnVideoChanged(self, evt):
-        path = self.videoText.GetValue()
-        frame = wx.GetTopLevelParent(self)
-        fp = os.path.join(frame.bundle.path, *path.split('/'))
+        fp = self.videoText.GetPath()
         print(fp)
         if os.path.exists(fp):
             self.mediaCtrl.Load(fp)
