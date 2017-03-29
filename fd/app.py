@@ -4,6 +4,7 @@
 import ConfigParser
 import wx
 import wx.aui
+import wx.html
 from fitness.uilib import BasePanel
 from fitness.uilib import IllustrationPanel
 from fitness.uilib import ExercisePanel
@@ -21,6 +22,44 @@ from fitness.model import Illustration
 from os.path import expanduser
 from datetime import datetime
 
+class AboutDialog(wx.Dialog):
+    text = '''
+<html>
+   <body bgcolor="#ACAA60">
+   <center><table bgcolor="#455481" width="100%" cellspacing="0"
+   cellpadding="0" border="1">
+   <tr>
+       <td align="center"><h1>FT课程编辑器</h1></td>
+   </tr>
+   </table>
+   </center>
+   <p><b>FT课程编辑器</b>是帮助运营快速编排健身课程的可视化工具,
+包括但不限于:
+   <ul>
+    <li>课程展示, 图片，音频视频预览</li>
+    <li>课程、子课、动作编辑</li>
+    <li>课程、子课、动作上传</li>
+    <li>课程二维码生成</li>
+   </ul>
+   欲知更多详情请移步至:
+   <a href="http://doc.pajk-ent.com/pages/viewpage.action?pageId=39035283">Fitness主页</a>
+   </p>
+   <p>FT课程编辑器由<a href="mailto:zhangfeng@hys-inc.cn?cc=57432307@qq.com&subject=WellDone">峰哥</a>倾情打造</p>
+   </body>
+</html>
+'''
+
+    def __init__(self, parent):
+        wx.Dialog.__init__(self, parent, -1, u'关于FT课程编辑器', size=(440, 400))
+        html = wx.html.HtmlWindow(self)
+        html.SetPage(self.text)
+        button = wx.Button(self, wx.ID_OK, u"确定")
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(html, 1, wx.EXPAND|wx.ALL, 5)
+        sizer.Add(button, 0, wx.ALIGN_CENTER|wx.ALL, 5)
+        self.SetSizer(sizer)
+        self.Layout()
+        self.Centre()
 
 class FtFrame(wx.Frame):
 
@@ -66,7 +105,7 @@ class FtFrame(wx.Frame):
     def createStatusBar(self):
         self.statusbar = self.CreateStatusBar()
         self.statusbar.SetFieldsCount(3)
-        self.statusbar.SetStatusWidths([-3, -2, -2])
+        self.statusbar.SetStatusWidths([-1, -1, -2])
 
     def createMenuBar(self):
         menuBar = wx.MenuBar()
@@ -97,12 +136,13 @@ class FtFrame(wx.Frame):
     def menuData(self):
         return [
             ("&File", (
-                ("&New"  , "New Sketch file"  , self.OnNew)  ,
-                ("&Open" , "Open sketch file" , self.OnOpen) ,
-                ("&Save" , "Save sketch file" , self.OnSave) ,
+                ("&New"  , u"新建"  , self.OnNew)  ,
+                ("&Open" , u"打开课程包" , self.OnOpen) ,
+                ("&Close" , u"关闭课程包" , self.OnClose) ,
+                ("&Save" , u"保存课程包" , self.OnSave) ,
                 ("", "", ""),
-                ("&Quit", "Quit", self.OnCloseWindow),
-                ("&About", "About", self.OnAbout)
+                ("&Quit", u"退出", self.OnCloseWindow),
+                ("&About", u"关于", self.OnAbout)
             )
         )]
 
@@ -163,6 +203,7 @@ class FtFrame(wx.Frame):
         return (
             (u"新建", "new.png", u"创建新的课程包", self.OnNew),
             (u"打开", "open.png", u"打开课程包", self.OnOpen),
+            (u"关闭", "close.png", u"关闭课程包", self.OnClose),
             (u"保存", "save.png", u"保存课程包", self.OnSave),
             ("", "", "", ""),
             (u"增加", "add.png", u"新增", self.OnAdd),
@@ -219,7 +260,18 @@ class FtFrame(wx.Frame):
             self.statusbar.SetStatusText(dlg.GetPath(), 2)
         dlg.Destroy()
 
+    def OnClose(self, event):
+        notebook = self.right
+        self._save()
+        notebook.DeleteAllPages()
+        self.tree.DeleteChildren(self.treeCurrId)
+        self.tree.DeleteChildren(self.treeLessonId)
+        self.tree.DeleteChildren(self.treeExerciseId)
+
     def OnSave(self, event):
+        self._save()
+
+    def _save(self):
         notebook = self.right
         # walk through all dirty pages and save
         for i in range(notebook.GetPageCount()):
@@ -296,7 +348,9 @@ class FtFrame(wx.Frame):
         dlg.Destroy()
 
     def OnAbout(self, event):
-        pass
+        dlg = AboutDialog(self)
+        dlg.ShowModal()
+        dlg.Destroy()
 
     def OnCloseWindow(self, event):
         # TODO: prompt save if content is dirty
