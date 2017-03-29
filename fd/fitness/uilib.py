@@ -6,6 +6,7 @@ import wx.dataview
 import wx.media
 import os.path
 import re
+import platform
 
 
 class BasePanel(wx.Panel):
@@ -14,8 +15,8 @@ class BasePanel(wx.Panel):
         self.dirty=False
         self.model=model
 
-    def MarkDirty(self):
-        self.dirty=True
+    def SetDirty(self, dirty):
+        self.dirty=dirty
 
     def IsDirty(self):
         return self.dirty
@@ -74,11 +75,16 @@ class AvPreviewPanel(wx.Panel):
         wx.Panel.__init__(self, parent)
 
         mainSizer = wx.BoxSizer(wx.VERTICAL)
+        extra_args = {
+            'size'  : (width, height),
+            'style' : wx.SIMPLE_BORDER
+        }
+        if platform.system() == 'Windows':
+            extra_args['szBackend'] = wx.media.MEDIABACKEND_WMP10
         self.mediaCtrl = wx.media.MediaCtrl(
             self,
             wx.ID_ANY,
-            size=(width, height),
-            style=wx.SIMPLE_BORDER
+            **extra_args
         )
         self.mediaCtrl.SetPlaybackRate(1)
         self.mediaCtrl.SetVolume(1)
@@ -252,12 +258,18 @@ class CurriculumPanel(BasePanel):
         self.previewVideoText.Bind(wx.EVT_TEXT, self.OnVideoChanged)
 
         # video preview area
+        extra_args = {
+            'size'  : (150, 100),
+            'style' : wx.SIMPLE_BORDER
+        }
+        if platform.system() == 'Windows':
+            extra_args['szBackend'] = wx.media.MEDIABACKEND_WMP10
         self.mediaCtrl = wx.media.MediaCtrl(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
-            size=(150, 100),
-            style=wx.SIMPLE_BORDER
+            **extra_args
         )
+
         self.mediaCtrl.SetPlaybackRate(1)
         self.mediaCtrl.SetVolume(1)
         self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
@@ -432,7 +444,8 @@ class CurriculumPanel(BasePanel):
 
     def OnMediaLoaded(self, evt):
         self.mediaCtrl.Pause()
-        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+        if not platform.system() == 'Windows':
+            self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
     def OnVideoChanged(self, evt):
         url = self.previewVideoText.GetValue()
@@ -440,7 +453,7 @@ class CurriculumPanel(BasePanel):
             self.mediaCtrl.LoadURI(url)
 
     def __del__(self):
-        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
+        if self.mediaCtrl and self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
             self.mediaCtrl.Stop()
 
 
@@ -1155,6 +1168,7 @@ class ExercisePanel(BasePanel):
         path = self.videoText.GetValue()
         frame = wx.GetTopLevelParent(self)
         fp = os.path.join(frame.bundle.path, *path.split('/'))
+        print(fp)
         self.prVideo.Load(fp)
 
     def __del__(self):

@@ -257,6 +257,8 @@ class FtFrame(wx.Frame):
             parser = self.getParser()
             self.bundle = parser.parse_bundle(dlg.GetPath())
             self.loadTree(self.bundle)
+            self.statusbar.SetStatusText('', 0)
+            self.statusbar.SetStatusText('', 1)
             self.statusbar.SetStatusText(dlg.GetPath(), 2)
         dlg.Destroy()
 
@@ -278,6 +280,7 @@ class FtFrame(wx.Frame):
             panel = notebook.GetPage(i)
             if isinstance(panel, BasePanel) and panel.IsDirty():
                 panel.SaveModel()
+                panel.SetDirty(False)
 
         bundle = Bundle(path=self.bundle.path, data=None)
         # walk through tree and save yml files
