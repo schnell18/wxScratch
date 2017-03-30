@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import ConfigParser
+import os
 import wx
 import wx.aui
 import wx.html
@@ -20,6 +21,9 @@ from fitness.model import LessonExercise
 from fitness.model import Exercise
 from fitness.model import Illustration
 from os.path import expanduser
+from os.path import basename
+from os.path import join
+from shutil import copy
 from datetime import datetime
 
 class AboutDialog(wx.Dialog):
@@ -105,7 +109,7 @@ class FtFrame(wx.Frame):
     def createStatusBar(self):
         self.statusbar = self.CreateStatusBar()
         self.statusbar.SetFieldsCount(3)
-        self.statusbar.SetStatusWidths([-1, -1, -2])
+        self.statusbar.SetStatusWidths([-3, -2, -5])
 
     def createMenuBar(self):
         menuBar = wx.MenuBar()
@@ -257,9 +261,10 @@ class FtFrame(wx.Frame):
             parser = self.getParser()
             self.bundle = parser.parse_bundle(dlg.GetPath())
             self.loadTree(self.bundle)
-            self.statusbar.SetStatusText('', 0)
             self.statusbar.SetStatusText('', 1)
             self.statusbar.SetStatusText(dlg.GetPath(), 2)
+            dest_dir = self._backup_meta_data()
+            self.statusbar.SetStatusText(u'课程包定义已备份至: ' + dest_dir, 0)
         dlg.Destroy()
 
     def OnClose(self, event):
@@ -273,6 +278,27 @@ class FtFrame(wx.Frame):
     def OnSave(self, event):
         self._save()
 
+    def _backup_meta_data(self):
+        # copy bundle yml files to ~/.fitness/backup/<bundle>/META-INF
+        path = self.bundle.path
+        dest_dir = join(
+            expanduser('~/.fitness'),
+            'backup',
+            basename(path),
+            'META-INF',
+        )
+        if not os.path.exists(dest_dir):
+           os.makedirs(dest_dir)
+        meta_dir = os.path.join(path, 'META-INF')
+        def_files = [
+            os.path.join(meta_dir, f) for f in os.listdir(meta_dir)
+            if os.path.isfile(os.path.join(meta_dir, f)) and f.endswith(".yml")
+        ]
+        for df in def_files:
+            copy(df, dest_dir)
+        return dest_dir
+
+
     def _save(self):
         notebook = self.right
         # walk through all dirty pages and save
@@ -281,6 +307,9 @@ class FtFrame(wx.Frame):
             if isinstance(panel, BasePanel) and panel.IsDirty():
                 panel.SaveModel()
                 panel.SetDirty(False)
+                text = notebook.GetPageText(i)
+                if text.startswith('*'):
+                    notebook.SetPageText(i, text[1:])
 
         bundle = Bundle(path=self.bundle.path, data=None)
         # walk through tree and save yml files
@@ -372,14 +401,14 @@ class FtFrame(wx.Frame):
             self.tree.SetItemData(treeItemId, l)
             for seq, le in enumerate(l.lesson_exercises, 1):
                 leItemId = self.tree.AppendItem(treeItemId, le.title, 5)
-                le.ui_ref_no = le.exercise_ref + '-' + str(seq)
+                le.ui_ref_no = 'le-' + le.exercise_ref + '-' + str(seq)
                 self.tree.SetItemData(leItemId, le)
         for e in bundle.exercises:
             treeItemId = self.tree.AppendItem(exerciseId, e.title, 3)
             self.tree.SetItemData(treeItemId, e)
             for seq, i in enumerate(e.illustrations, 1):
                 illuItemId = self.tree.AppendItem(treeItemId, i.title, 4)
-                i.ui_ref_no = e.ref_no + '-' + str(seq)
+                i.ui_ref_no = 'il-' + e.ref_no + '-' + str(seq)
                 self.tree.SetItemData(illuItemId, i)
         self.tree.Expand(rootId)
         self.tree.Expand(currId)

@@ -27,20 +27,130 @@ class Parser:
         self.repo = repo
 
     def save_bundle(self, bundle):
+        yaml_obj = self.as_yaml_data(bundle)
         # save curriculum.yml
-        fp = os.path.join(bundle.path, 'META-INF', 'curriculum.yml.new')
+        fp = os.path.join(bundle.path, 'META-INF', 'curriculum.yml')
         with open(fp, 'w') as cf:
-            yaml.dump(bundle.curricula, cf, default_flow_style=False)
+            yaml.dump(
+                yaml_obj['curricula'],
+                cf,
+                allow_unicode=True,
+                default_flow_style=False
+            )
 
         # save lesson.yml
-        fp = os.path.join(bundle.path, 'META-INF', 'lesson.yml.new')
+        fp = os.path.join(bundle.path, 'META-INF', 'lesson.yml')
         with open(fp, 'w') as lf:
-            yaml.dump(bundle.lessons, lf, default_flow_style=False)
+            yaml.dump(
+                yaml_obj['lessons'],
+                lf,
+                allow_unicode=True,
+                default_flow_style=False
+            )
 
         # save exercise.yml
-        fp = os.path.join(bundle.path, 'META-INF', 'exercise.yml.new')
+        fp = os.path.join(bundle.path, 'META-INF', 'exercise.yml')
         with open(fp, 'w') as ef:
-            yaml.dump(bundle.exercises, ef, default_flow_style=False)
+            yaml.dump(
+                yaml_obj['exercises'],
+                ef,
+                allow_unicode=True,
+                default_flow_style=False
+            )
+
+    def as_yaml_data(self, bundle):
+        data = {}
+        curricula = []
+        for c in bundle.curricula:
+            rec = {}
+            rec['refNo'] = c.ref_no
+            rec['cornerLabelType'] = c.corner_label_type
+            rec['cover'] = c.cover
+            rec['icon'] = c.icon
+            rec['title'] = c.title
+            rec['description'] = c.description
+            rec['previewVideo'] = c.preview_video
+            cls = []
+            for l in c.curriculum_lessons:
+                lesson_rec = {}
+                lesson_rec['lessonRef'] = l.lesson_ref
+                lesson_rec['title'] = l.lesson_title
+                lesson_rec['break'] = l.is_break
+                cls.append(lesson_rec)
+            rec['lessons'] = cls
+            if c.next_curricula_refs:
+                rec['nextCurricula'] = c.next_curricula_refs
+            curricula.append({'curriculum': rec})
+        data['curricula'] = curricula
+
+        lessons = []
+        for c in bundle.lessons:
+            rec = {}
+            rec['refNo'] = c.ref_no
+            rec['type'] = c.type
+            rec['title'] = c.title
+            rec['bgMusic'] = c.bg_music
+            rec['title'] = c.title
+            rec['encouragement'] = c.encouragement
+            rec['description'] = c.description
+            rec['nextDayIntro'] = c.next_day_intro
+            cls = []
+            for l in c.lesson_exercises:
+                le_rec = {}
+                le_rec['exerciseRef'] = l.exercise_ref
+                le_rec['repetition'] = l.repetition
+                le_rec['measure'] = l.measure
+                if l.begin_voices:
+                    bvs = []
+                    for bv in l.begin_voices:
+                        bv_rec = {}
+                        bv_rec['audioName'] = bv.audio_name
+                        bv_rec['position'] = bv.position
+                        bvs.append(bv_rec)
+                    le_rec['beginVoices'] = bvs
+                if l.mid_voices:
+                    bvs = []
+                    for bv in l.mid_voices:
+                        bv_rec = {}
+                        bv_rec['audioName'] = bv.audio_name
+                        bv_rec['position'] = bv.position
+                        bvs.append(bv_rec)
+                    le_rec['midVoices'] = bvs
+                cls.append(le_rec)
+            rec['exercises'] = cls
+            lessons.append({'lesson': rec})
+        data['lessons'] = lessons
+
+        exercises = []
+        for c in bundle.exercises:
+            rec = {}
+            if c.type == 1:
+                rec['refNo'] = c.ref_no
+                rec['type'] = c.type
+                rec['title'] = c.title
+                rec['action'] = c.action
+                rec['calories'] = c.calories
+                rec['duration'] = c.duration
+                rec['description'] = c.description
+                rec['thumbnail'] = c.thumbnail
+                rec['videoName'] = c.video_name
+                if c.illustrations:
+                    cls = []
+                    for l in c.illustrations:
+                        illu_rec = {}
+                        illu_rec['title'] = l.title
+                        illu_rec['description'] = l.description
+                        cls.append(illu_rec)
+                    rec['illustrations'] = cls
+            else:
+                rec['refNo'] = c.ref_no
+                rec['type'] = c.type
+                rec['title'] = c.title
+                rec['duration'] = c.duration
+            exercises.append({'exercise': rec})
+        data['exercises'] = exercises
+
+        return data
 
     def parse_bundle(self, path):
         if not os.path.isdir(path):
@@ -49,7 +159,7 @@ class Parser:
         def_files = [
             os.path.join(meta_dir, f) for f in os.listdir(meta_dir)
             if os.path.isfile(os.path.join(meta_dir, f)) and f.endswith(".yml")
-            ]
+        ]
         if not os.path.isdir(meta_dir) or len(def_files) == 0:
             raise ValueError("No curriculum definition found at: " + path)
 

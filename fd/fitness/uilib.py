@@ -15,6 +15,11 @@ class BasePanel(wx.Panel):
         self.dirty=False
         self.model=model
 
+        # bind all change events
+        self.Bind(wx.EVT_TEXT, self.OnFormDataChanged)
+        self.Bind(wx.EVT_CHOICE, self.OnFormDataChanged)
+        self.Bind(wx.EVT_SPINCTRL, self.OnFormDataChanged)
+
     def SetDirty(self, dirty):
         self.dirty=dirty
 
@@ -24,6 +29,17 @@ class BasePanel(wx.Panel):
     def SaveModel(self):
         # to be override in subclass
         pass
+
+    def OnFormDataChanged(self, evt):
+        parent = self.GetParent()
+        if isinstance(parent, wx.aui.AuiNotebook):
+            pageIndex = parent.GetPageIndex(self)
+            if not pageIndex == wx.NOT_FOUND:
+                text = parent.GetPageText(pageIndex)
+                if not text.startswith('*'):
+                    parent.SetPageText(pageIndex, '*' + text)
+        self.SetDirty(True)
+        evt.Skip()
 
 
 class ImagePreviewPanel(wx.Panel):
@@ -421,7 +437,7 @@ class CurriculumPanel(BasePanel):
         # load lessons
         if model.curriculum_lessons:
             for seq, l in enumerate(model.curriculum_lessons, 1):
-                row = [seq, l.lesson_ref, l.lesson_title, l.is_break]
+                row = [str(seq), l.lesson_ref, l.lesson_title, l.is_break]
                 self.dvLessons.AppendItem(row)
 
         # load related curriculum
@@ -869,7 +885,7 @@ class LessonExercisePanel(BasePanel):
         model = self.model
         model.exercise_ref = self.refNoText.GetValue()
         model.measure = self.measureChoice.GetSelection() + 1
-        model.repetition = self.repetitionGpin.GetValue()
+        model.repetition = self.repetitionSpin.GetValue()
 
         # TODO: save begin voices
         for bv in sorted(model.begin_voices, key=lambda e : e.position):
@@ -1154,7 +1170,7 @@ class ExercisePanel(BasePanel):
         model.action = self.nameText.GetValue()
         model.title = self.titleText.GetValue()
         model.calories = self.caloriesSpin.GetValue()
-        model.duration = self.durationSpin.SetValue()
+        model.duration = self.durationSpin.GetValue()
         model.thumbnail = self.thumbnailText.GetValue()
         model.video_name = self.videoText.GetValue()
 
