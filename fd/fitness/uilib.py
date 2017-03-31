@@ -145,6 +145,140 @@ class AvPreviewPanel(wx.Panel):
             self.mediaCtrl.Stop()
 
 
+class LessonAudioPanel(wx.Panel):
+    def __init__(self, parent):
+        wx.Panel.__init__(
+            self,
+            parent,
+            id = wx.ID_ANY,
+            size = (500, -1),
+            style = wx.TAB_TRAVERSAL
+        )
+
+        mainSizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.dvAudio = wx.dataview.DataViewListCtrl(
+            self,
+            wx.ID_ANY,
+            style=wx.dataview.DV_ROW_LINES|wx.dataview.DV_VERT_RULES
+        )
+        self.dvAudio.SetMinSize((-1, 120))
+
+        self.colPos = self.dvAudio.AppendTextColumn(
+            label=u"位置",
+            width=50
+        )
+        self.colAudio = self.dvAudio.AppendTextColumn(
+            label=u"音频",
+            width=200
+        )
+        mainSizer.Add(self.dvAudio, 7, wx.ALL, 5)
+        self.Bind(
+            wx.dataview.EVT_DATAVIEW_SELECTION_CHANGED,
+            self.OnSelected,
+            self.dvAudio
+        )
+
+        btnSizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.addBtn  = wx.Button(self, wx.ID_ANY, u"增加")
+        self.delBtn  = wx.Button(self, wx.ID_ANY, u"删除")
+        self.upBtn   = wx.Button( self, wx.ID_ANY, u"上移")
+        self.downBtn = wx.Button( self, wx.ID_ANY, u"下移")
+
+        self.addBtn.Enable(False)
+        self.delBtn.Enable(False)
+        self.upBtn.Enable(False)
+        self.downBtn.Enable(False)
+
+        btnSizer.Add(self.addBtn,  0, wx.ALL, 5)
+        btnSizer.Add(self.delBtn,  0, wx.ALL, 5)
+        btnSizer.Add(self.upBtn,   0, wx.ALL, 5)
+        btnSizer.Add(self.downBtn, 0, wx.ALL, 5)
+
+        mainSizer.Add(btnSizer, 1, wx.EXPAND, 5)
+        self.SetSizer(mainSizer)
+        self.Layout()
+
+    def OnSelected(self, evt):
+        self.addBtn.Enable(True)
+        self.delBtn.Enable(True)
+        self.upBtn.Enable(True)
+        self.downBtn.Enable(True)
+
+
+    def AddRow(self, row):
+        self.dvAudio.AppendItem(row)
+
+
+class CurriLessonPanel(wx.Panel):
+    def __init__(self, parent, width, height):
+        wx.Panel.__init__(
+            self,
+            parent,
+            id = wx.ID_ANY,
+            size = (500, -1),
+            style = wx.TAB_TRAVERSAL
+        )
+
+        mainSizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.dvLesson = wx.dataview.DataViewListCtrl(
+            self,
+            wx.ID_ANY,
+            style=wx.dataview.DV_ROW_LINES|wx.dataview.DV_VERT_RULES
+        )
+        self.dvLesson.SetMinSize((-1, 150))
+
+        self.colRefNo = self.dvLesson.AppendTextColumn(
+            label=u"编码",
+            width=150
+        )
+        self.colTitle = self.dvLesson.AppendTextColumn(
+            label=u"标题",
+            width=200
+        )
+        self.colBreak = self.dvLesson.AppendToggleColumn(u"休息")
+        mainSizer.Add(self.dvLesson, 7, wx.ALL, 5)
+        self.Bind(
+            wx.dataview.EVT_DATAVIEW_SELECTION_CHANGED,
+            self.OnSelected,
+            self.dvLesson
+        )
+
+        btnSizer = wx.BoxSizer(wx.VERTICAL)
+        btnSizer.AddSpacer(20)
+
+        self.addBtn  = wx.Button(self, wx.ID_ANY, u"增加")
+        self.delBtn  = wx.Button(self, wx.ID_ANY, u"删除")
+        self.upBtn   = wx.Button( self, wx.ID_ANY, u"上移")
+        self.downBtn = wx.Button( self, wx.ID_ANY, u"下移")
+
+        self.addBtn.Enable(False)
+        self.delBtn.Enable(False)
+        self.upBtn.Enable(False)
+        self.downBtn.Enable(False)
+
+        btnSizer.Add(self.addBtn,  0, wx.ALL, 5)
+        btnSizer.Add(self.delBtn,  0, wx.ALL, 5)
+        btnSizer.Add(self.upBtn,   0, wx.ALL, 5)
+        btnSizer.Add(self.downBtn, 0, wx.ALL, 5)
+
+        mainSizer.Add(btnSizer, 1, wx.EXPAND, 5)
+        self.SetSizer(mainSizer)
+        self.Layout()
+
+    def OnSelected(self, evt):
+        self.addBtn.Enable(True)
+        self.delBtn.Enable(True)
+        self.upBtn.Enable(True)
+        self.downBtn.Enable(True)
+
+
+    def AddRow(self, row):
+        self.dvLesson.AppendItem(row)
+
+
 class CurriculumPanel(BasePanel):
     def __init__(self, parent, model):
         BasePanel.__init__(self, parent, model, name=model.name_for_ui())
@@ -231,11 +365,9 @@ class CurriculumPanel(BasePanel):
 
         self.descriptionText = wx.TextCtrl(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.Size(-1, 40),
-            wx.TE_MULTILINE
+            id=wx.ID_ANY,
+            size=(-1, 40),
+            style=wx.TE_MULTILINE
         )
         bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(1)
@@ -368,8 +500,6 @@ class CurriculumPanel(BasePanel):
         biSizer.Add(bifSizer, 1, wx.ALL|wx.EXPAND, 5)
 
 
-        scrollSizer.Add(biSizer, 3, wx.ALL|wx.EXPAND, 5)
-
         lessonsSizer = wx.StaticBoxSizer(
             wx.StaticBox(
                 self.scrollWin,
@@ -379,20 +509,12 @@ class CurriculumPanel(BasePanel):
             wx.VERTICAL
         )
 
-        self.dvLessons = wx.dataview.DataViewListCtrl(
+        self.dvLessons = CurriLessonPanel(
             lessonsSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            500,
+            300
         )
-        self.dvLessonsSeqNo = self.dvLessons.AppendTextColumn(u"序号")
-        self.dvLessonsRefNo = self.dvLessons.AppendTextColumn(u"子课编码")
-        self.dvLessonsTitle = self.dvLessons.AppendTextColumn(u"子课标题")
-        self.dvLessonsRest = self.dvLessons.AppendToggleColumn(u"休息")
         lessonsSizer.Add( self.dvLessons, 1, wx.ALL|wx.EXPAND, 5)
-
-        scrollSizer.Add(lessonsSizer, 2, wx.ALL|wx.EXPAND, 5)
 
         relatedSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -415,6 +537,8 @@ class CurriculumPanel(BasePanel):
         self.dvRelatedCover = self.dvRelated.AppendTextColumn(u"封面")
         relatedSizer.Add(self.dvRelated, 0, wx.ALL|wx.EXPAND, 5)
 
+        scrollSizer.Add(biSizer, 0, wx.ALL|wx.EXPAND, 5)
+        scrollSizer.Add(lessonsSizer, 0, wx.ALL|wx.EXPAND, 5)
         scrollSizer.Add(relatedSizer, 1, wx.EXPAND|wx.ALL, 5)
 
         self.scrollWin.SetSizer(scrollSizer)
@@ -449,9 +573,9 @@ class CurriculumPanel(BasePanel):
 
         # load lessons
         if model.curriculum_lessons:
-            for seq, l in enumerate(model.curriculum_lessons, 1):
-                row = [str(seq), l.lesson_ref, l.lesson_title, l.is_break]
-                self.dvLessons.AppendItem(row)
+            for l in model.curriculum_lessons:
+                row = [l.lesson_ref, l.lesson_title, l.is_break]
+                self.dvLessons.AddRow(row)
 
         # load related curriculum
         if model.next_curricula:
@@ -779,10 +903,7 @@ class LessonExercisePanel(BasePanel):
         self.refNoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
-            u"动作编码",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            u"动作编码"
         )
         self.refNoLabel.Wrap(-1)
         bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
@@ -792,15 +913,12 @@ class LessonExercisePanel(BasePanel):
             id=wx.ID_ANY
         )
         bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(100)
+        bifSizer.Add(100, 0)
 
         self.repetitionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
-            u"重复",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            u"重复"
         )
         self.repetitionLabel.Wrap(-1)
         bifSizer.Add(self.repetitionLabel, 0, wx.ALL, 5)
@@ -837,7 +955,6 @@ class LessonExercisePanel(BasePanel):
         bifSizer.Add(self.measureChoice, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(1)
         biSizer.Add(bifSizer, 0, wx.EXPAND | wx.ALL, 5)
-        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
 
         bvSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -848,16 +965,8 @@ class LessonExercisePanel(BasePanel):
             wx.VERTICAL
         )
 
-        self.beginVoices = wx.dataview.DataViewListCtrl(
-            bvSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        self.beginVoices.AppendTextColumn(u"音频")
+        self.beginVoices = LessonAudioPanel(bvSizer.GetStaticBox())
         bvSizer.Add(self.beginVoices, 1, wx.ALL|wx.EXPAND, 5)
-        scrollSizer.Add(bvSizer, 1, wx.EXPAND | wx.ALL, 5)
 
         mdSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -868,17 +977,12 @@ class LessonExercisePanel(BasePanel):
             wx.VERTICAL
         )
 
-        self.midVoices = wx.dataview.DataViewListCtrl(
-            mdSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        self.midVoices.AppendTextColumn(u"位置")
-        self.midVoices.AppendTextColumn(u"音频")
+        self.midVoices = LessonAudioPanel(mdSizer.GetStaticBox())
         mdSizer.Add(self.midVoices, 1, wx.ALL|wx.EXPAND, 5)
-        scrollSizer.Add(mdSizer, 1, wx.EXPAND | wx.ALL, 5)
+
+        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(bvSizer, 0, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(mdSizer, 0, wx.EXPAND | wx.ALL, 5)
 
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
@@ -894,13 +998,13 @@ class LessonExercisePanel(BasePanel):
 
         # load begin voices
         for bv in sorted(model.begin_voices, key=lambda e : e.position):
-            row = [bv.audio_name]
-            self.beginVoices.AppendItem(row)
+            row = [str(bv.position), bv.audio_name]
+            self.beginVoices.AddRow(row)
 
         # load mid voices
         for bv in model.mid_voices:
             row = [str(bv.position), bv.audio_name]
-            self.midVoices.AppendItem(row)
+            self.midVoices.AddRow(row)
 
     def SaveModel(self):
         model = self.model
