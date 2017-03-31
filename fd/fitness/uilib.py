@@ -9,6 +9,15 @@ import re
 import platform
 
 
+ftEVT_FORM_DATA_CHG = wx.NewEventType()
+EVT_FORM_DATA_CHG = wx.PyEventBinder(ftEVT_FORM_DATA_CHG, 1)
+
+
+class FormDataChangeEvent(wx.CommandEvent):
+    def __init__(self, evtType, id):
+        wx.CommandEvent.__init__(self, evtType, id)
+
+
 class BasePanel(wx.Panel):
     def __init__(self, parent, model, **kwargs):
         wx.Panel.__init__(self, parent, **kwargs)
@@ -22,6 +31,10 @@ class BasePanel(wx.Panel):
 
     def SetDirty(self, dirty):
         self.dirty=dirty
+        # fire EVT_FORM_DATA_CHG
+        if dirty:
+            evt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
+            self.GetEventHandler().ProcessEvent(evt)
 
     def IsDirty(self):
         return self.dirty
@@ -128,7 +141,7 @@ class AvPreviewPanel(wx.Panel):
         return u"时长 %02d:%02d:%02d" % (hours, mins, seconds)
 
     def __del__(self):
-        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
+        if self.mediaCtrl and self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
             self.mediaCtrl.Stop()
 
 
@@ -412,25 +425,25 @@ class CurriculumPanel(BasePanel):
 
     def LoadModel(self):
         model = self.model
-        self.refNoText.SetValue(
+        self.refNoText.ChangeValue(
             model.ref_no if model.ref_no else ''
         )
-        self.titleText.SetValue(
+        self.titleText.ChangeValue(
             model.title if model.title else ''
         )
-        self.descriptionText.SetValue(
+        self.descriptionText.ChangeValue(
             model.description if model.description else ''
         )
         self.cornerTypeChoice.SetSelection(
             model.corner_label_type if model.corner_label_type else 0
         )
-        self.previewVideoText.SetValue(
+        self.previewVideoText.ChangeValue(
             model.preview_video if model.preview_video else ''
         )
-        self.coverText.SetValue(
+        self.coverText.ChangeValue(
             model.cover if model.cover else ''
         )
-        self.iconText.SetValue(
+        self.iconText.ChangeValue(
             model.icon if model.icon else ''
         )
 
@@ -445,6 +458,8 @@ class CurriculumPanel(BasePanel):
             for curr in model.next_curricula:
                 row = [curr.ref_no, curr.title, curr.cover]
                 self.dvRelated.AppendItem(row)
+
+        self._loadVideo()
 
     def SaveModel(self):
         model = self.model
@@ -464,6 +479,9 @@ class CurriculumPanel(BasePanel):
             self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
     def OnVideoChanged(self, evt):
+        self._loadVideo()
+
+    def _loadVideo(self):
         url = self.previewVideoText.GetValue()
         if re.match('^http(s)?://', url):
             self.mediaCtrl.LoadURI(url)
@@ -698,13 +716,14 @@ class LessonPanel(BasePanel):
 
     def LoadModel(self):
         model = self.model
-        self.refNoText.SetValue(model.ref_no)
+        self.refNoText.ChangeValue(model.ref_no)
         self.typeChoice.SetSelection(model.type - 1)
-        self.titleText.SetValue(model.title)
-        self.descriptionText.SetValue(model.description)
-        self.encourageText.SetValue(model.encouragement)
-        self.nextDayIntroText.SetValue(model.next_day_intro)
-        self.bgmMusicText.SetValue(model.bg_music)
+        self.titleText.ChangeValue(model.title)
+        self.descriptionText.ChangeValue(model.description)
+        self.encourageText.ChangeValue(model.encouragement)
+        self.nextDayIntroText.ChangeValue(model.next_day_intro)
+        self.bgmMusicText.ChangeValue(model.bg_music)
+        self._loadAudio()
 
     def SaveModel(self):
         model = self.model
@@ -717,14 +736,16 @@ class LessonPanel(BasePanel):
         model.bg_music = self.bgmMusicText.GetValue()
 
     def OnBgmChanged(self, evt):
+        self._loadAudio()
+
+    def _loadAudio(self):
         path = self.bgmMusicText.GetValue()
         frame = wx.GetTopLevelParent(self)
         fp = os.path.join(frame.bundle.path, *path.split('/'))
         self.prAudio.Load(fp)
 
     def __del__(self):
-        if self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
-            self.mediaCtrl.Stop()
+        pass
 
 
 class LessonExercisePanel(BasePanel):
@@ -867,7 +888,7 @@ class LessonExercisePanel(BasePanel):
 
     def LoadModel(self):
         model = self.model
-        self.refNoText.SetValue(model.exercise_ref)
+        self.refNoText.ChangeValue(model.exercise_ref)
         self.measureChoice.SetSelection(model.measure - 1)
         self.repetitionSpin.SetValue(model.repetition)
 
@@ -878,7 +899,7 @@ class LessonExercisePanel(BasePanel):
 
         # load mid voices
         for bv in model.mid_voices:
-            row = [bv.position, bv.audio_name]
+            row = [str(bv.position), bv.audio_name]
             self.midVoices.AppendItem(row)
 
     def SaveModel(self):
@@ -888,14 +909,8 @@ class LessonExercisePanel(BasePanel):
         model.repetition = self.repetitionSpin.GetValue()
 
         # TODO: save begin voices
-        for bv in sorted(model.begin_voices, key=lambda e : e.position):
-            row = [bv.audio_name]
-            self.beginVoices.AppendItem(row)
 
         # TODO: save mid voices
-        for bv in model.mid_voices:
-            row = [bv.position, bv.audio_name]
-            self.midVoices.AppendItem(row)
 
 
 class ExercisePanel(BasePanel):
@@ -1154,37 +1169,49 @@ class ExercisePanel(BasePanel):
 
     def LoadModel(self):
         model = self.model
-        self.exerciseRefNoText.SetValue(model.ref_no)
+        self.exerciseRefNoText.ChangeValue(model.ref_no)
         self.typeChoice.SetSelection(model.type - 1)
-        self.nameText.SetValue(model.action)
-        self.titleText.SetValue(model.title)
-        self.caloriesSpin.SetValue(model.calories)
         self.durationSpin.SetValue(model.duration)
-        self.thumbnailText.SetValue(model.thumbnail)
-        self.videoText.SetValue(model.video_name)
+        self.titleText.ChangeValue(model.title)
+        if model.type == 1:
+            self.nameText.ChangeValue(model.action)
+            self.caloriesSpin.SetValue(model.calories)
+            self.thumbnailText.ChangeValue(model.thumbnail)
+            self.videoText.ChangeValue(model.video_name)
+            self._loadPreview()
 
     def SaveModel(self):
         model = self.model
         model.ref_no = self.exerciseRefNoText.GetValue()
         model.type = self.typeChoice.GetSelection() + 1
-        model.action = self.nameText.GetValue()
-        model.title = self.titleText.GetValue()
-        model.calories = self.caloriesSpin.GetValue()
         model.duration = self.durationSpin.GetValue()
-        model.thumbnail = self.thumbnailText.GetValue()
-        model.video_name = self.videoText.GetValue()
+        model.title = self.titleText.GetValue()
+        if model.type == 1:
+            model.action = self.nameText.GetValue()
+            model.calories = self.caloriesSpin.GetValue()
+            model.thumbnail = self.thumbnailText.GetValue()
+            model.video_name = self.videoText.GetValue()
 
     def OnThumbnailChanged(self, evt):
+        self._loadThumbnail()
+
+    def OnVideoChanged(self, evt):
+        self._loadVideo()
+
+    def _loadPreview(self):
+        self._loadThumbnail()
+        self._loadVideo()
+
+    def _loadThumbnail(self):
         path = self.thumbnailText.GetValue()
         frame = wx.GetTopLevelParent(self)
         fp = os.path.join(frame.bundle.path, *path.split('/'))
         self.prImg.Load(fp)
 
-    def OnVideoChanged(self, evt):
+    def _loadVideo(self):
         path = self.videoText.GetValue()
         frame = wx.GetTopLevelParent(self)
         fp = os.path.join(frame.bundle.path, *path.split('/'))
-        print(fp)
         self.prVideo.Load(fp)
 
     def __del__(self):
@@ -1288,8 +1315,8 @@ class IllustrationPanel(BasePanel):
 
     def LoadModel(self):
         model = self.model
-        self.illuTitleText.SetValue(model.title)
-        self.illuDescriptionText.SetValue(model.description)
+        self.illuTitleText.ChangeValue(model.title)
+        self.illuDescriptionText.ChangeValue(model.description)
         self._layout_images()
 
     def SaveModel(self):

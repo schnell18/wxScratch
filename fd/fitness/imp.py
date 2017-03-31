@@ -3,6 +3,7 @@
 import wx
 import ConfigParser
 import qrcode
+import os.path
 from threading         import Thread
 from wx.lib.pubsub     import pub
 from os.path           import expanduser
@@ -181,7 +182,8 @@ class ImpDialog(wx.Dialog):
             self.progressBar.SetValue(int(data))
             # display qrcode image for curricula
             for i, curri in enumerate(self.bundle.curricula):
-                self.qrImages[i].SetBitmap(self.gen_qr_bitmap_for(curri))
+                bmp = self.gen_qr_bitmap_for(curri)
+                self.qrImages[i].SetBitmap(bmp)
         elif msg_type == EVENT_EXCEPTION_OCCURRED:
             e = data
             if not isinstance(e, UserAbortError):
@@ -249,14 +251,13 @@ class ImpDialog(wx.Dialog):
         qrSizer = wx.GridSizer(rows, 4, vgap=5, hgap=10)
 
         self.qrImages = []
-        placeholder = wx.Image(135, 135)
-        placeholder.Replace(0, 0, 0, 255, 255, 255)
         for curri in bundle.curricula:
+            placeholder = self._load(os.path.join(bundle.path, curri.icon))
             imgSizer = wx.BoxSizer(wx.VERTICAL)
             img = wx.StaticBitmap(
                 self,
                 wx.ID_ANY,
-                placeholder.ConvertToBitmap(),
+                placeholder,
                 wx.DefaultPosition,
                 wx.DefaultSize,
                 0
@@ -309,3 +310,15 @@ class ImpDialog(wx.Dialog):
         img = wx.Image(pil.width, pil.height)
         img.SetData(pil.convert('RGB').tobytes())
         return img.ConvertToBitmap()
+
+    def _load(self, path):
+        # scale to fit
+        return self._scale_to_fit(wx.Bitmap(path))
+
+    def _scale_to_fit(self, bmp):
+        boundw, boundh = 135, 135
+        img = bmp.ConvertToImage()
+        img.Rescale(boundw, boundh)
+        bmp = wx.Bitmap(img)
+        return bmp
+

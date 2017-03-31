@@ -12,6 +12,7 @@ from fitness.uilib import ExercisePanel
 from fitness.uilib import LessonPanel
 from fitness.uilib import LessonExercisePanel
 from fitness.uilib import CurriculumPanel
+from fitness.uilib import EVT_FORM_DATA_CHG
 from fitness.imp import ImpDialog
 from fitness.parser import Parser
 from fitness.model import Bundle
@@ -100,6 +101,10 @@ class FtFrame(wx.Frame):
         self.right = self.createNotbook(self.sp)
         self.sp.SplitVertically(self.left, self.right, 300)
 
+        # manage bundle change status
+        self.__dirty__ = False
+        self.Bind(EVT_FORM_DATA_CHG, self.OnFormDataChanged)
+
         self.Layout()
         self.Centre()
 
@@ -108,8 +113,8 @@ class FtFrame(wx.Frame):
 
     def createStatusBar(self):
         self.statusbar = self.CreateStatusBar()
-        self.statusbar.SetFieldsCount(3)
-        self.statusbar.SetStatusWidths([-3, -2, -5])
+        self.statusbar.SetFieldsCount(2)
+        self.statusbar.SetStatusWidths([-3, -1])
 
     def createMenuBar(self):
         menuBar = wx.MenuBar()
@@ -191,6 +196,7 @@ class FtFrame(wx.Frame):
             wx.aui.AUI_NB_DEFAULT_STYLE
         )
 
+        self.Bind(wx.aui.EVT_AUINOTEBOOK_PAGE_CLOSE, self.OnTabClose, notebook)
         notebook.AssignImageList(self.imageList)
         return notebook
 
@@ -242,17 +248,34 @@ class FtFrame(wx.Frame):
                 notebook.AddPage(le, data.title, True, 5)
             elif isinstance(data, Exercise):
                 exercise = ExercisePanel(notebook, data)
-                notebook.AddPage(exercise, data.action, True, 3)
+                notebook.AddPage(exercise, data.title, True, 3)
             elif isinstance(data, Illustration):
                 illustration = IllustrationPanel(notebook, data)
                 notebook.AddPage(illustration, data.title, True, 4)
         else:
             self.right.SetSelection(pageIndex)
 
+    def OnFormDataChanged(self, event):
+        self.__dirty__ = True
+        text = self.GetTitle()
+        if not text.startswith('*'):
+            self.SetTitle('* ' + text)
+
+    def OnTabClose(self, event):
+        notebook = self.right
+        pageIndex = event.GetSelection()
+        if not pageIndex == wx.NOT_FOUND:
+            panel = notebook.GetPage(pageIndex)
+            if isinstance(panel, BasePanel) and panel.IsDirty():
+                panel.SaveModel()
+        event.Allow()
+
     def OnNew(self, event):
-        pass
+        self._close()
 
     def OnOpen(self, event):
+        self._close()
+
         dlg = wx.DirDialog(
             self,
             message=u"请选择课程包目录"
@@ -262,21 +285,58 @@ class FtFrame(wx.Frame):
             self.bundle = parser.parse_bundle(dlg.GetPath())
             self.loadTree(self.bundle)
             self.statusbar.SetStatusText('', 1)
-            self.statusbar.SetStatusText(dlg.GetPath(), 2)
+            self.SetTitle(u'课程包: [%s]' % dlg.GetPath())
             dest_dir = self._backup_meta_data()
             self.statusbar.SetStatusText(u'课程包定义已备份至: ' + dest_dir, 0)
         dlg.Destroy()
 
     def OnClose(self, event):
-        notebook = self.right
+        self._close()
+
+    def OnImport(self, event):
+        # save current bundle if it is modified
+        if self.__dirty__ and self.bundle:
+            dlg = wx.MessageDialog(
+                self,
+                u'课程包已修改，是否保存后再导入?',
+                u'确认',
+                wx.YES_NO | wx.ICON_QUESTION
+            )
+            if dlg.ShowModal() == wx.ID_YES:
+                self._save()
+            dlg.Destroy()
+
+        dlg = ImpDialog(self, self.bundle)
+        dlg.ShowModal()
+        dlg.Destroy()
+
+    def OnSave(self, event):
         self._save()
+
+    def _close(self):
+        # save current bundle if it is modified
+        if self.__dirty__ and self.bundle:
+            dlg = wx.MessageDialog(
+                self,
+                u'课程包已修改，是否保存?',
+                u'确认',
+                wx.YES_NO | wx.ICON_QUESTION
+            )
+            result = dlg.ShowModal()
+            if result == wx.ID_YES:
+                self._save()
+            dlg.Destroy()
+
+        notebook = self.right
         notebook.DeleteAllPages()
         self.tree.DeleteChildren(self.treeCurrId)
         self.tree.DeleteChildren(self.treeLessonId)
         self.tree.DeleteChildren(self.treeExerciseId)
-
-    def OnSave(self, event):
-        self._save()
+        self.bundle = None
+        self.__dirty__ == False
+        self.SetTitle('')
+        self.statusbar.SetStatusText('', 0)
+        self.statusbar.SetStatusText('', 1)
 
     def _backup_meta_data(self):
         # copy bundle yml files to ~/.fitness/backup/<bundle>/META-INF
@@ -297,7 +357,6 @@ class FtFrame(wx.Frame):
         for df in def_files:
             copy(df, dest_dir)
         return dest_dir
-
 
     def _save(self):
         notebook = self.right
@@ -320,6 +379,13 @@ class FtFrame(wx.Frame):
         parser.save_bundle(bundle)
         self.statusbar.SetStatusText(u"课程包已保存", 0)
         self.statusbar.SetStatusText(u"最近一次保存于" + self.getTimestamp(), 1)
+        self._clear_dirty_indicator()
+
+    def _clear_dirty_indicator(self):
+        # clear dirty indicator
+        title = self.GetTitle()
+        if title and title.startswith('*'):
+            self.SetTitle(title[1:])
 
     def getTimestamp(self):
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -359,6 +425,15 @@ class FtFrame(wx.Frame):
                 self.tree.SetItemData(newTreeItemId, c)
                 self.tree.EditLabel(newTreeItemId)
 
+    def OnAbout(self, event):
+        dlg = AboutDialog(self)
+        dlg.ShowModal()
+        dlg.Destroy()
+
+    def OnCloseWindow(self, event):
+        # TODO: prompt save if content is dirty
+        self.Close()
+
     def OnRemove(self, event):
         treeItemId = self.tree.GetFocusedItem()
         if self.CanDelete(treeItemId):
@@ -373,20 +448,6 @@ class FtFrame(wx.Frame):
 
     def CanDelete(self, treeItemId):
         return treeItemId.IsOk() and treeItemId != self.treeRootId and treeItemId != self.treeCurrId and treeItemId != self.treeLessonId and treeItemId != self.treeExerciseId
-
-    def OnImport(self, event):
-        dlg = ImpDialog(self, self.bundle)
-        dlg.ShowModal()
-        dlg.Destroy()
-
-    def OnAbout(self, event):
-        dlg = AboutDialog(self)
-        dlg.ShowModal()
-        dlg.Destroy()
-
-    def OnCloseWindow(self, event):
-        # TODO: prompt save if content is dirty
-        self.Close()
 
     def loadTree(self, bundle):
         rootId = self.treeRootId
