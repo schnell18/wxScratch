@@ -372,9 +372,9 @@ class FtFrame(wx.Frame):
 
         bundle = Bundle(path=self.bundle.path, data=None)
         # walk through tree and save yml files
-        bundle.curricula = self.getChildren(self.tree, self.treeCurrId)
-        bundle.lessons = self.getChildren(self.tree, self.treeLessonId)
-        bundle.exercises = self.getChildren(self.tree, self.treeExerciseId)
+        bundle.curricula = self.get_curricula()
+        bundle.lessons = self.get_lessons()
+        bundle.exercises = self.get_exercises()
         parser = self.getParser()
         parser.save_bundle(bundle)
         self.statusbar.SetStatusText(u"课程包已保存", 0)
@@ -390,7 +390,16 @@ class FtFrame(wx.Frame):
     def getTimestamp(self):
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    def getChildren(self, tree, parent):
+    def get_curricula(self):
+        return self._getChildren(self.tree, self.treeCurrId)
+
+    def get_lessons(self):
+        return self._getChildren(self.tree, self.treeLessonId)
+
+    def get_exercises(self):
+        return self._getChildren(self.tree, self.treeExerciseId)
+
+    def _getChildren(self, tree, parent):
           result = []
           item, cookie = tree.GetFirstChild(parent)
           while item:

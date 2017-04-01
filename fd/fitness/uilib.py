@@ -230,13 +230,18 @@ class CurriLessonPanel(wx.Panel):
         )
         self.dvLesson.SetMinSize((-1, 150))
 
-        self.colRefNo = self.dvLesson.AppendTextColumn(
-            label=u"编码",
+        choices = self._get_lesson_refnos()
+        dvCol = wx.dataview.DataViewColumn(
+            u"编码",
+            wx.dataview.DataViewChoiceRenderer(choices),
+            0,
             width=150
         )
+        self.colRefNo = self.dvLesson.AppendColumn(dvCol)
         self.colTitle = self.dvLesson.AppendTextColumn(
             label=u"标题",
-            width=200
+            width=200,
+            mode=wx.dataview.DATAVIEW_CELL_EDITABLE
         )
         self.colBreak = self.dvLesson.AppendToggleColumn(u"休息")
         mainSizer.Add(self.dvLesson, 7, wx.ALL, 5)
@@ -277,6 +282,10 @@ class CurriLessonPanel(wx.Panel):
 
     def AddRow(self, row):
         self.dvLesson.AppendItem(row)
+
+    def _get_lesson_refnos(self):
+        frame = wx.GetTopLevelParent(self)
+        return [l.ref_no for l in frame.get_lessons()]
 
 
 class CurriculumPanel(BasePanel):
