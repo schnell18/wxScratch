@@ -408,7 +408,7 @@ class Parser:
         return curricula, lessons, exercises
 
     def _validate_file(self, prop_name, prop_value, base_dir):
-        if not re.match(r'^[-a-z0-9_/.]+$', prop_value):
+        if not re.match(r'^[-a-zA-Z0-9_/.]+$', prop_value):
             raise ValueError("%s filename: %s contains invalid char" % (prop_name, prop_value))
         file = os.path.join(base_dir, prop_value)
         if not os.path.isfile(file):

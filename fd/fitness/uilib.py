@@ -8,12 +8,13 @@ import os.path
 import re
 import platform
 from fitness.model import CurriculumLesson
+from shutil import copy
 
 
-ftEVT_FORM_DATA_CHG = wx.NewEventType()
+ftEVT_FORM_DATA_CHG     = wx.NewEventType()
 ftEVT_SUB_FORM_DATA_CHG = wx.NewEventType()
-EVT_FORM_DATA_CHG = wx.PyEventBinder(ftEVT_FORM_DATA_CHG, 1)
-EVT_SUB_FORM_DATA_CHG = wx.PyEventBinder(ftEVT_SUB_FORM_DATA_CHG, 2)
+EVT_FORM_DATA_CHG       = wx.PyEventBinder(ftEVT_FORM_DATA_CHG, 1)
+EVT_SUB_FORM_DATA_CHG   = wx.PyEventBinder(ftEVT_SUB_FORM_DATA_CHG, 2)
 
 
 class FormDataChangeEvent(wx.CommandEvent):
@@ -28,10 +29,10 @@ class BasePanel(wx.Panel):
         self.model=model
 
         # bind all change events
-        self.Bind(wx.EVT_TEXT, self.OnFormDataChanged)
-        self.Bind(wx.EVT_CHOICE, self.OnFormDataChanged)
-        self.Bind(wx.EVT_SPINCTRL, self.OnFormDataChanged)
-        self.Bind(EVT_SUB_FORM_DATA_CHG, self.OnFormDataChanged)
+        self.Bind(wx.EVT_TEXT           , self.OnFormDataChanged)
+        self.Bind(wx.EVT_CHOICE         , self.OnFormDataChanged)
+        self.Bind(wx.EVT_SPINCTRL       , self.OnFormDataChanged)
+        self.Bind(EVT_SUB_FORM_DATA_CHG , self.OnFormDataChanged)
 
     def SetDirty(self, dirty):
         self.dirty=dirty
@@ -51,7 +52,7 @@ class BasePanel(wx.Panel):
         return self.dirty
 
     def SaveModel(self):
-        # to be override in subclass
+        # to be overrided in subclass
         pass
 
     def OnFormDataChanged(self, evt):
@@ -59,12 +60,24 @@ class BasePanel(wx.Panel):
         evt.Skip()
 
 
+class FtFileDropTarget(wx.FileDropTarget):
+    def __init__(self, parent):
+        wx.FileDropTarget.__init__(self)
+        self.parent = parent
+
+    def OnDropFiles(self, x, y, filenames):
+        self.parent.SetPath(filenames[0])
+        return True
+
+
 class ImagePreviewPanel(wx.Panel):
-    def __init__(self, parent, width=300, height=200):
+    def __init__(self, parent, width=300, height=200, usage=None):
         wx.Panel.__init__(self, parent)
 
         self.width = width
         self.height = height
+        self.relativePath = None
+        self.usage = usage
         mainSizer = wx.BoxSizer(wx.VERTICAL)
         # image preview area
         placeholder = wx.Image(width, height)
@@ -74,12 +87,39 @@ class ImagePreviewPanel(wx.Panel):
             wx.ID_ANY,
             placeholder.ConvertToBitmap()
         )
+        dt = FtFileDropTarget(self)
+        self.imgCtrl.SetDropTarget(dt)
 
         mainSizer.Add(self.imgCtrl, 1, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
         self.captionLbl = wx.StaticText(self, wx.ID_ANY, "")
         self.captionLbl.Wrap(-1)
         mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
         self.SetSizerAndFit(mainSizer)
+
+    def GetRelativePath(self):
+        return self.relativePath
+
+    def SetPath(self, path):
+        # copy into bundle directory
+        rel_dir = 'image'
+        if self.usage:
+            rel_dir = '/'.join([rel_dir, self.usage])
+        rel_path = '/'.join([rel_dir, os.path.basename(path)])
+        dest_dir = os.path.join(self.baseDir, *rel_dir.split('/'))
+        if not os.path.exists(dest_dir):
+           os.makedirs(dest_dir)
+        copy(path, dest_dir)
+        if self.LoadWithRelPath(self.baseDir, rel_path):
+            newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
+            self.GetEventHandler().ProcessEvent(newEvt)
+
+    def LoadWithRelPath(self, base_dir, rel_path):
+        if rel_path and os.path.exists(base_dir):
+            self.baseDir = base_dir
+            self.relativePath = rel_path
+            fp = os.path.join(base_dir, *rel_path.split('/'))
+            return self.Load(fp)
+        return False
 
     def Load(self, path):
         if os.path.exists(path):
@@ -89,13 +129,15 @@ class ImagePreviewPanel(wx.Panel):
             self.imgCtrl.SetBitmap(self._scale_to_fit(bmp))
             txt = u"宽高 %d X %d" % (width, height)
             self.captionLbl.SetLabel(txt)
+            return True
+        return False
 
     def _scale_to_fit(self, bmp):
         (width, height) = (bmp.GetWidth(), bmp.GetHeight())
         factor = max(width / self.width, height / self.height)
         if factor > 1:
             img = bmp.ConvertToImage()
-            img.Rescale(self.width / factor, self.height / factor)
+            img.Rescale(width / factor, height / factor)
             bmp = wx.Bitmap(img)
         return bmp
 
@@ -371,6 +413,7 @@ class CurriculumPanel(BasePanel):
         bifSizer.AddGrowableRow(2)
         bifSizer.SetFlexibleDirection(wx.BOTH)
         bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+        biSizer.Add(bifSizer, 0, wx.ALL | wx.EXPAND, 5)
 
         self.refNoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -392,7 +435,7 @@ class CurriculumPanel(BasePanel):
             0
         )
         bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
+        bifSizer.Add(100, -1)
 
         self.titleLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -511,25 +554,13 @@ class CurriculumPanel(BasePanel):
         self.coverLabel.Wrap(-1)
         bifSizer.Add(self.coverLabel, 0, wx.ALL, 5)
 
-        self.coverText = wx.TextCtrl(
+        self.coverPanel = ImagePreviewPanel(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            width=300,
+            height=100
         )
-        bifSizer.Add(self.coverText, 0, wx.ALL|wx.EXPAND, 5)
-
-        self.coverBtn = wx.Button(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            u"浏览",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.coverBtn, 0, wx.ALL, 5)
+        bifSizer.Add(self.coverPanel, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         self.iconLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -542,27 +573,13 @@ class CurriculumPanel(BasePanel):
         self.iconLabel.Wrap(-1)
         bifSizer.Add(self.iconLabel, 0, wx.ALL, 5)
 
-        self.iconText = wx.TextCtrl(
+        self.iconPanel = ImagePreviewPanel(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            width=150,
+            height=100
         )
-        bifSizer.Add(self.iconText, 0, wx.ALL|wx.EXPAND, 5)
-
-        self.iconBtn = wx.Button(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            u"浏览",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.iconBtn, 0, wx.ALL, 5)
-        biSizer.Add(bifSizer, 1, wx.ALL|wx.EXPAND, 5)
-
+        bifSizer.Add(self.iconPanel, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
 
         lessonsSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -628,12 +645,6 @@ class CurriculumPanel(BasePanel):
         self.previewVideoText.ChangeValue(
             model.preview_video if model.preview_video else ''
         )
-        self.coverText.ChangeValue(
-            model.cover if model.cover else ''
-        )
-        self.iconText.ChangeValue(
-            model.icon if model.icon else ''
-        )
 
         # load lessons
         if model.curriculum_lessons:
@@ -648,6 +659,10 @@ class CurriculumPanel(BasePanel):
                 self.dvRelated.AppendItem(row)
 
         self._loadVideo()
+        frame = wx.GetTopLevelParent(self)
+        base_dir = frame.bundle.path
+        self.coverPanel.LoadWithRelPath(base_dir, model.cover)
+        self.iconPanel.LoadWithRelPath(base_dir, model.icon)
 
     def SaveModel(self):
         model = self.model
@@ -656,8 +671,8 @@ class CurriculumPanel(BasePanel):
         model.description = self.descriptionText.GetValue()
         model.corner_label_type = self.cornerTypeChoice.GetSelection()
         model.preview_video = self.previewVideoText.GetValue()
-        model.cover = self.coverText.GetValue()
-        model.icon = self.iconText.GetValue()
+        model.cover = self.coverPanel.GetRelativePath()
+        model.icon = self.iconPanel.GetRelativePath()
         # assembly curriculum lessons
         model.curriculum_lessons = []
         curri_lessons = self.dvLessons.GetCurriculumLessons()

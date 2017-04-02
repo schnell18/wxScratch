@@ -310,6 +310,7 @@ class FtFrame(wx.Frame):
         text = self.GetTitle()
         if not text.startswith('*'):
             self.SetTitle('* ' + text)
+        self.statusbar.SetStatusText(u'课程包已修改, 请注意保存', 0)
 
     def OnTabClose(self, event):
         notebook = self.right
