@@ -66,6 +66,7 @@ class AboutDialog(wx.Dialog):
         self.Layout()
         self.Centre()
 
+
 class FtFrame(wx.Frame):
 
     def __init__(self, parent):
@@ -103,6 +104,7 @@ class FtFrame(wx.Frame):
 
         # manage bundle change status
         self.__dirty__ = False
+        self.__drag_item__ = None
         self.Bind(EVT_FORM_DATA_CHG, self.OnFormDataChanged)
 
         self.Layout()
@@ -173,6 +175,8 @@ class FtFrame(wx.Frame):
             wx.TR_DEFAULT_STYLE
         )
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
+        self.tree.Bind(wx.EVT_TREE_BEGIN_DRAG, self.OnTreeBeginDrag)
+        self.tree.Bind(wx.EVT_TREE_END_DRAG, self.OnTreeEndDrag)
 
         self.tree.AssignImageList(self.imageList)
         self.treeRootId = self.tree.AddRoot(u"课程包", 0)
@@ -228,6 +232,49 @@ class FtFrame(wx.Frame):
             self.createSimpleTool(*each)
         self.toolbar.Realize()
 
+    def OnTreeBeginDrag(self, event):
+        if self.canDrag(event.GetItem()):
+            self.__dragItem__ = event.GetItem()
+            event.Allow()
+        else:
+            event.Veto()
+
+    def OnTreeEndDrag(self, event):
+        newItem = event.GetItem()
+        oldItem = self.__dragItem__
+        if not (newItem and oldItem):
+            return
+
+        parentItem = self.tree.GetItemParent(newItem)
+        if not parentItem:
+            return
+        oldParentItem = self.tree.GetItemParent(oldItem)
+        # unless drop onto the sibling
+        if not oldParentItem == parentItem:
+            return
+        oldData = self.tree.GetItemData(oldItem)
+        oldLabel = self.tree.GetItemText(oldItem)
+        oldImage = self.tree.GetItemImage(oldItem)
+        self.tree.Delete(oldItem)
+        self.tree.InsertItem(
+            parentItem,
+            newItem,
+            oldLabel,
+            image=oldImage,
+            data=oldData
+        )
+        # update parent data and mark bundle dirty
+        parentData = self.tree.GetItemData(parentItem)
+        if isinstance(parentData, Lesson):
+            parentData.lesson_exercises = self.get_lesson_exercises(parentItem)
+            self._mark_bundle_dirty()
+
+    def canDrag(self, treeItemId):
+        if treeItemId:
+            data = self.tree.GetItemData(treeItemId)
+            return isinstance(data, LessonExercise)
+        return False
+
     def OnSelChanged(self, event):
         data = self.tree.GetItemData(event.GetItem())
         if not data:
@@ -256,6 +303,9 @@ class FtFrame(wx.Frame):
             self.right.SetSelection(pageIndex)
 
     def OnFormDataChanged(self, event):
+        self._mark_bundle_dirty()
+
+    def _mark_bundle_dirty(self):
         self.__dirty__ = True
         text = self.GetTitle()
         if not text.startswith('*'):
@@ -312,6 +362,7 @@ class FtFrame(wx.Frame):
 
     def OnSave(self, event):
         self._save()
+        self.__dirty__ = False
 
     def _close(self):
         # save current bundle if it is modified
@@ -395,6 +446,9 @@ class FtFrame(wx.Frame):
 
     def get_lessons(self):
         return self._getChildren(self.tree, self.treeLessonId)
+
+    def get_lesson_exercises(self, lessonItemId):
+        return self._getChildren(self.tree, lessonItemId)
 
     def get_exercises(self):
         return self._getChildren(self.tree, self.treeExerciseId)

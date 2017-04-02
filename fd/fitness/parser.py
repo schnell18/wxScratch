@@ -75,7 +75,8 @@ class Parser:
                 lesson_rec = {}
                 lesson_rec['lessonRef'] = l.lesson_ref
                 lesson_rec['title'] = l.lesson_title
-                lesson_rec['break'] = l.is_break
+                if l.is_break:
+                    lesson_rec['break'] = 'y'
                 cls.append(lesson_rec)
             rec['lessons'] = cls
             if c.next_curricula_refs:

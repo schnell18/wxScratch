@@ -77,6 +77,12 @@ class CurriculumLesson:
         self.lesson_title = kwargs.get("lesson_title")
         self.is_break = kwargs.get("is_break")
 
+    def __str__(self):
+        return "CurriculumLesson: %s %s %s" % (self.lesson_ref, self.lesson_title, self.is_break)
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class Exercise:
     def __init__(self, ref_no, type, **kwargs):

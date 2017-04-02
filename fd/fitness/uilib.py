@@ -7,10 +7,13 @@ import wx.media
 import os.path
 import re
 import platform
+from fitness.model import CurriculumLesson
 
 
 ftEVT_FORM_DATA_CHG = wx.NewEventType()
+ftEVT_SUB_FORM_DATA_CHG = wx.NewEventType()
 EVT_FORM_DATA_CHG = wx.PyEventBinder(ftEVT_FORM_DATA_CHG, 1)
+EVT_SUB_FORM_DATA_CHG = wx.PyEventBinder(ftEVT_SUB_FORM_DATA_CHG, 2)
 
 
 class FormDataChangeEvent(wx.CommandEvent):
@@ -28,11 +31,19 @@ class BasePanel(wx.Panel):
         self.Bind(wx.EVT_TEXT, self.OnFormDataChanged)
         self.Bind(wx.EVT_CHOICE, self.OnFormDataChanged)
         self.Bind(wx.EVT_SPINCTRL, self.OnFormDataChanged)
+        self.Bind(EVT_SUB_FORM_DATA_CHG, self.OnFormDataChanged)
 
     def SetDirty(self, dirty):
         self.dirty=dirty
         # fire EVT_FORM_DATA_CHG
         if dirty:
+            parent = self.GetParent()
+            if isinstance(parent, wx.aui.AuiNotebook):
+                pageIndex = parent.GetPageIndex(self)
+                if not pageIndex == wx.NOT_FOUND:
+                    text = parent.GetPageText(pageIndex)
+                    if not text.startswith('*'):
+                        parent.SetPageText(pageIndex, '*' + text)
             evt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
             self.GetEventHandler().ProcessEvent(evt)
 
@@ -44,13 +55,6 @@ class BasePanel(wx.Panel):
         pass
 
     def OnFormDataChanged(self, evt):
-        parent = self.GetParent()
-        if isinstance(parent, wx.aui.AuiNotebook):
-            pageIndex = parent.GetPageIndex(self)
-            if not pageIndex == wx.NOT_FOUND:
-                text = parent.GetPageText(pageIndex)
-                if not text.startswith('*'):
-                    parent.SetPageText(pageIndex, '*' + text)
         self.SetDirty(True)
         evt.Skip()
 
@@ -206,7 +210,6 @@ class LessonAudioPanel(wx.Panel):
         self.upBtn.Enable(True)
         self.downBtn.Enable(True)
 
-
     def AddRow(self, row):
         self.dvAudio.AppendItem(row)
 
@@ -231,12 +234,12 @@ class CurriLessonPanel(wx.Panel):
         self.dvLesson.SetMinSize((-1, 150))
 
         choices = self._get_lesson_refnos()
-        dvCol = wx.dataview.DataViewColumn(
-            u"编码",
-            wx.dataview.DataViewChoiceRenderer(choices),
-            0,
-            width=150
+        # prevent in-place editting
+        render = wx.dataview.DataViewChoiceRenderer(
+            choices,
+            mode=wx.dataview.DATAVIEW_CELL_INERT
         )
+        dvCol = wx.dataview.DataViewColumn(u"编码", render, 0, width=150)
         self.colRefNo = self.dvLesson.AppendColumn(dvCol)
         self.colTitle = self.dvLesson.AppendTextColumn(
             label=u"标题",
@@ -259,7 +262,6 @@ class CurriLessonPanel(wx.Panel):
         self.upBtn   = wx.Button( self, wx.ID_ANY, u"上移")
         self.downBtn = wx.Button( self, wx.ID_ANY, u"下移")
 
-        self.addBtn.Enable(False)
         self.delBtn.Enable(False)
         self.upBtn.Enable(False)
         self.downBtn.Enable(False)
@@ -269,23 +271,76 @@ class CurriLessonPanel(wx.Panel):
         btnSizer.Add(self.upBtn,   0, wx.ALL, 5)
         btnSizer.Add(self.downBtn, 0, wx.ALL, 5)
 
+        self.Bind(wx.EVT_BUTTON, self.OnAdd,  self.addBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnDel,  self.delBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnUp,   self.upBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnDown, self.downBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnFormDataChanged)
+        self.Bind(wx.dataview.EVT_DATAVIEW_ITEM_VALUE_CHANGED, self.OnFormDataChanged)
+
         mainSizer.Add(btnSizer, 1, wx.EXPAND, 5)
         self.SetSizer(mainSizer)
         self.Layout()
 
+    def OnFormDataChanged(self, evt):
+        # fire EVT_SUB_FORM_DATA_CHG
+        newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
+        self.GetEventHandler().ProcessEvent(newEvt)
+        evt.Skip()
+
     def OnSelected(self, evt):
-        self.addBtn.Enable(True)
         self.delBtn.Enable(True)
         self.upBtn.Enable(True)
         self.downBtn.Enable(True)
 
+    def OnAdd(self, evt):
+        ref_no = self._get_lesson_refnos()[0]
+        self.dvLesson.AppendItem([ref_no, u'请输入标题', False])
+
+    def OnDel(self, evt):
+        row = self.dvLesson.GetSelectedRow()
+        if not row == wx.NOT_FOUND:
+            self.dvLesson.DeleteItem(row)
+
+    def OnUp(self, evt):
+        row = self.dvLesson.GetSelectedRow()
+        if row != wx.NOT_FOUND and row > 0:
+            old = [
+                self.dvLesson.GetValue(row, 0),
+                self.dvLesson.GetValue(row, 1),
+                self.dvLesson.GetValue(row, 2)
+            ]
+            self.dvLesson.DeleteItem(row)
+            self.dvLesson.InsertItem(row - 1, old)
+            self.dvLesson.SelectRow(row - 1)
+
+    def OnDown(self, evt):
+        row = self.dvLesson.GetSelectedRow()
+        if row != wx.NOT_FOUND and row < self.dvLesson.GetItemCount() - 1:
+            old = self._get_row_data(row)
+            self.dvLesson.DeleteItem(row)
+            self.dvLesson.InsertItem(row + 1, old)
+            self.dvLesson.SelectRow(row + 1)
 
     def AddRow(self, row):
         self.dvLesson.AppendItem(row)
 
+    def GetCurriculumLessons(self):
+        curri_lessons = []
+        for row in range(self.dvLesson.GetItemCount()):
+            curri_lessons.append(self._get_row_data(row))
+        return curri_lessons
+
     def _get_lesson_refnos(self):
         frame = wx.GetTopLevelParent(self)
         return [l.ref_no for l in frame.get_lessons()]
+
+    def _get_row_data(self, row):
+        return [
+            self.dvLesson.GetValue(row, 0),
+            self.dvLesson.GetValue(row, 1),
+            self.dvLesson.GetValue(row, 2)
+        ]
 
 
 class CurriculumPanel(BasePanel):
@@ -603,7 +658,18 @@ class CurriculumPanel(BasePanel):
         model.preview_video = self.previewVideoText.GetValue()
         model.cover = self.coverText.GetValue()
         model.icon = self.iconText.GetValue()
-        # TODO: assembly curriculum lessons
+        # assembly curriculum lessons
+        model.curriculum_lessons = []
+        curri_lessons = self.dvLessons.GetCurriculumLessons()
+        for cl in curri_lessons:
+            model.curriculum_lessons.append(
+                CurriculumLesson(
+                    lesson_ref=cl[0],
+                    lesson_title=cl[1],
+                    is_break=cl[2]
+                )
+            )
+
         # TODO: assembly next curriculua
 
     def OnMediaLoaded(self, evt):
