@@ -8,7 +8,7 @@ from util import md5sum
 class Bundle:
     def __init__(self, **kwargs):
         self.path = kwargs['path']
-        self.data = kwargs['data']
+        self.data = kwargs.get('data')
         self.curricula = None
         self.lessons = None
         self.exercise = None
@@ -181,3 +181,55 @@ class ResourceSet:
 
     def get_resources(self):
         return self.resource_set.values()
+
+
+def make_curriculum_prototye():
+    c = Curriculum('cfixme')
+    c.title = u'未命名'
+    c.cover = ''
+    c.icon = ''
+    c.preview_video = ''
+    c.corner_label_type = 1
+    c.description = ''
+    return c
+
+def make_lesson_prototye():
+    l = Lesson('lfixme')
+    l.title = u'未命名子课'
+    l.type = 1
+    l.description = ''
+    l.bg_music = ''
+    l.encouragement = ''
+    l.next_day_intro = ''
+    # l.lesson_exercises = kwargs.get("lesson_exercises")
+    return l
+
+def make_exercise_prototye():
+    e = Exercise('efixme', 1)
+    e.type = 1
+    e.title = u'未命名动作'
+    e.action = ''
+    e.calories = 1
+    e.duration = 1
+    e.description = ''
+    e.thumbnail = ''
+    e.video_name = ''
+    # l.illustrations = kwargs.get("illustrations")
+    return e
+
+def make_illustration_prototye():
+    i = Illustration()
+    i.title = u'未命名'
+    i.description = ''
+    i.images = ''
+    return i
+
+def make_lesson_exercise_prototye():
+    le = LessonExercise()
+    le.title = u'未命名'
+    le.exercise_ref = ''
+    le.repetition = 1
+    le.measure = 1
+    # le.begin_voices =
+    # le.mid_voices =
+    return le

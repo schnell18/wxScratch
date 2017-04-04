@@ -4,9 +4,9 @@ from __future__ import print_function
 
 import re
 import os.path
+import os
 import sys
 import tempfile
-from zipfile import ZipFile
 
 import yaml
 from fitness.model import Bundle
@@ -28,6 +28,10 @@ class Parser:
 
     def save_bundle(self, bundle):
         yaml_obj = self.as_yaml_data(bundle)
+        # create META-INF directory if absent
+        sub_dir = os.path.join(bundle.path, 'META-INF')
+        if not os.path.exists(sub_dir):
+           os.makedirs(sub_dir)
         # save curriculum.yml
         fp = os.path.join(bundle.path, 'META-INF', 'curriculum.yml')
         with open(fp, 'w') as cf:
@@ -71,14 +75,15 @@ class Parser:
             rec['description'] = c.description
             rec['previewVideo'] = c.preview_video
             cls = []
-            for l in c.curriculum_lessons:
-                lesson_rec = {}
-                lesson_rec['lessonRef'] = l.lesson_ref
-                lesson_rec['title'] = l.lesson_title
-                if l.is_break:
-                    lesson_rec['break'] = 'y'
-                cls.append(lesson_rec)
-            rec['lessons'] = cls
+            if c.curriculum_lessons:
+                for l in c.curriculum_lessons:
+                    lesson_rec = {}
+                    lesson_rec['lessonRef'] = l.lesson_ref
+                    lesson_rec['title'] = l.lesson_title
+                    if l.is_break:
+                        lesson_rec['break'] = 'y'
+                    cls.append(lesson_rec)
+                rec['lessons'] = cls
             if c.next_curricula_refs:
                 rec['nextCurricula'] = c.next_curricula_refs
             curricula.append({'curriculum': rec})
@@ -95,30 +100,31 @@ class Parser:
             rec['encouragement'] = c.encouragement
             rec['description'] = c.description
             rec['nextDayIntro'] = c.next_day_intro
-            cls = []
-            for l in c.lesson_exercises:
-                le_rec = {}
-                le_rec['exerciseRef'] = l.exercise_ref
-                le_rec['repetition'] = l.repetition
-                le_rec['measure'] = l.measure
-                if l.begin_voices:
-                    bvs = []
-                    for bv in l.begin_voices:
-                        bv_rec = {}
-                        bv_rec['audioName'] = bv.audio_name
-                        bv_rec['position'] = bv.position
-                        bvs.append(bv_rec)
-                    le_rec['beginVoices'] = bvs
-                if l.mid_voices:
-                    bvs = []
-                    for bv in l.mid_voices:
-                        bv_rec = {}
-                        bv_rec['audioName'] = bv.audio_name
-                        bv_rec['position'] = bv.position
-                        bvs.append(bv_rec)
-                    le_rec['midVoices'] = bvs
-                cls.append(le_rec)
-            rec['exercises'] = cls
+            if c.lesson_exercises:
+                cls = []
+                for l in c.lesson_exercises:
+                    le_rec = {}
+                    le_rec['exerciseRef'] = l.exercise_ref
+                    le_rec['repetition'] = l.repetition
+                    le_rec['measure'] = l.measure
+                    if l.begin_voices:
+                        bvs = []
+                        for bv in l.begin_voices:
+                            bv_rec = {}
+                            bv_rec['audioName'] = bv.audio_name
+                            bv_rec['position'] = bv.position
+                            bvs.append(bv_rec)
+                        le_rec['beginVoices'] = bvs
+                    if l.mid_voices:
+                        bvs = []
+                        for bv in l.mid_voices:
+                            bv_rec = {}
+                            bv_rec['audioName'] = bv.audio_name
+                            bv_rec['position'] = bv.position
+                            bvs.append(bv_rec)
+                        le_rec['midVoices'] = bvs
+                    cls.append(le_rec)
+                rec['exercises'] = cls
             lessons.append({'lesson': rec})
         data['lessons'] = lessons
 

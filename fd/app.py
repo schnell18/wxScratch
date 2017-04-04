@@ -21,11 +21,17 @@ from fitness.model import Lesson
 from fitness.model import LessonExercise
 from fitness.model import Exercise
 from fitness.model import Illustration
+from fitness.model import make_curriculum_prototye
+from fitness.model import make_lesson_prototye
+from fitness.model import make_exercise_prototye
+from fitness.model import make_illustration_prototye
+from fitness.model import make_lesson_exercise_prototye
 from os.path import expanduser
 from os.path import basename
 from os.path import join
 from shutil import copy
 from datetime import datetime
+
 
 class AboutDialog(wx.Dialog):
     text = '''
@@ -79,6 +85,7 @@ class FtFrame(wx.Frame):
             size = wx.Size(1000, 700),
             style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL
         )
+        self.bundle = None
 
         # create status bar
         self.createStatusBar()
@@ -174,16 +181,10 @@ class FtFrame(wx.Frame):
             wx.DefaultSize,
             wx.TR_DEFAULT_STYLE
         )
+        self.tree.AssignImageList(self.imageList)
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
         self.tree.Bind(wx.EVT_TREE_BEGIN_DRAG, self.OnTreeBeginDrag)
         self.tree.Bind(wx.EVT_TREE_END_DRAG, self.OnTreeEndDrag)
-
-        self.tree.AssignImageList(self.imageList)
-        self.treeRootId = self.tree.AddRoot(u"课程包", 0)
-        rootId = self.treeRootId
-        self.treeCurrId = self.tree.AppendItem(rootId, u"课程", 1)
-        self.treeLessonId = self.tree.AppendItem(rootId, u"子课", 2)
-        self.treeExerciseId = self.tree.AppendItem(rootId, u"动作", 3)
 
         bSizer3.Add(self.tree, 3, wx.EXPAND|wx.RIGHT, 5)
         scrollWin.SetSizer(bSizer3)
@@ -201,6 +202,7 @@ class FtFrame(wx.Frame):
         )
 
         self.Bind(wx.aui.EVT_AUINOTEBOOK_PAGE_CLOSE, self.OnTabClose, notebook)
+        self.Bind(wx.aui.EVT_AUINOTEBOOK_PAGE_CHANGED, self.OnTabChanged, notebook)
         notebook.AssignImageList(self.imageList)
         return notebook
 
@@ -252,7 +254,7 @@ class FtFrame(wx.Frame):
         # unless drop onto the sibling
         if not oldParentItem == parentItem:
             return
-        oldData = self.tree.GetItemData(oldItem)
+        oldData = self.tree.GetItemData(oldItem)[0]
         oldLabel = self.tree.GetItemText(oldItem)
         oldImage = self.tree.GetItemImage(oldItem)
         self.tree.Delete(oldItem)
@@ -271,12 +273,13 @@ class FtFrame(wx.Frame):
 
     def canDrag(self, treeItemId):
         if treeItemId:
-            data = self.tree.GetItemData(treeItemId)
+            data = self.tree.GetItemData(treeItemId)[0]
             return isinstance(data, LessonExercise)
         return False
 
     def OnSelChanged(self, event):
-        data = self.tree.GetItemData(event.GetItem())
+        model = self.tree.GetItemData(event.GetItem())
+        data = model[0]
         if not data:
             return
 
@@ -285,19 +288,19 @@ class FtFrame(wx.Frame):
         pageIndex = notebook.GetPageIndex(page)
         if not page and pageIndex < 0 :
             if isinstance(data, Curriculum):
-                curr = CurriculumPanel(notebook, data)
+                curr = CurriculumPanel(notebook, model)
                 notebook.AddPage(curr, data.title, True, 1)
             elif isinstance(data, Lesson):
-                lesson = LessonPanel(notebook, data)
+                lesson = LessonPanel(notebook, model)
                 notebook.AddPage(lesson, data.title, True, 2)
             elif isinstance(data, LessonExercise):
-                le = LessonExercisePanel(notebook, data)
+                le = LessonExercisePanel(notebook, model)
                 notebook.AddPage(le, data.title, True, 5)
             elif isinstance(data, Exercise):
-                exercise = ExercisePanel(notebook, data)
+                exercise = ExercisePanel(notebook, model)
                 notebook.AddPage(exercise, data.title, True, 3)
             elif isinstance(data, Illustration):
-                illustration = IllustrationPanel(notebook, data)
+                illustration = IllustrationPanel(notebook, model)
                 notebook.AddPage(illustration, data.title, True, 4)
         else:
             self.right.SetSelection(pageIndex)
@@ -318,11 +321,31 @@ class FtFrame(wx.Frame):
         if not pageIndex == wx.NOT_FOUND:
             panel = notebook.GetPage(pageIndex)
             if isinstance(panel, BasePanel) and panel.IsDirty():
+                # TODO: prompt user
                 panel.SaveModel()
         event.Allow()
 
+    def OnTabChanged(self, event):
+        notebook = self.right
+        pageIndex = event.GetSelection()
+        if not pageIndex == wx.NOT_FOUND:
+            panel = notebook.GetPage(pageIndex)
+            if isinstance(panel, BasePanel):
+                self.tree.EnsureVisible(panel.model[2])
+                self.tree.SetFocusedItem(panel.model[2])
+
     def OnNew(self, event):
         self._close()
+        # select a bundle directory
+        dlg = wx.DirDialog(
+            self,
+            message=u"请选择课程包目录"
+        )
+        if dlg.ShowModal() == wx.ID_OK:
+            self.bundle = Bundle(path=dlg.GetPath())
+            self._create_empty_tree()
+            self.statusbar.SetStatusText('', 1)
+            self.SetTitle(u'课程包: [%s]' % dlg.GetPath())
 
     def OnOpen(self, event):
         self._close()
@@ -366,8 +389,10 @@ class FtFrame(wx.Frame):
         self.__dirty__ = False
 
     def _close(self):
+        if not self.bundle:
+            return
         # save current bundle if it is modified
-        if self.__dirty__ and self.bundle:
+        if self.__dirty__ :
             dlg = wx.MessageDialog(
                 self,
                 u'课程包已修改，是否保存?',
@@ -381,14 +406,25 @@ class FtFrame(wx.Frame):
 
         notebook = self.right
         notebook.DeleteAllPages()
-        self.tree.DeleteChildren(self.treeCurrId)
-        self.tree.DeleteChildren(self.treeLessonId)
-        self.tree.DeleteChildren(self.treeExerciseId)
+        self.tree.DeleteAllItems()
         self.bundle = None
         self.__dirty__ == False
         self.SetTitle('')
         self.statusbar.SetStatusText('', 0)
         self.statusbar.SetStatusText('', 1)
+
+    def _create_empty_tree(self):
+        self.treeRootId = self.tree.AddRoot(u"课程包", 0)
+        rootId = self.treeRootId
+        self.treeCurrId = self.tree.AppendItem(rootId, u"课程", 1)
+        self.treeLessonId = self.tree.AppendItem(rootId, u"子课", 2)
+        self.treeExerciseId = self.tree.AppendItem(rootId, u"动作", 3)
+        cp = make_curriculum_prototye()
+        lp = make_lesson_prototye()
+        ep = make_exercise_prototye()
+        self.tree.SetItemData(self.treeCurrId, [None, cp])
+        self.tree.SetItemData(self.treeLessonId, [None, lp])
+        self.tree.SetItemData(self.treeExerciseId, [None, ep])
 
     def _backup_meta_data(self):
         # copy bundle yml files to ~/.fitness/backup/<bundle>/META-INF
@@ -458,7 +494,7 @@ class FtFrame(wx.Frame):
           result = []
           item, cookie = tree.GetFirstChild(parent)
           while item:
-              result.append(tree.GetItemData(item))
+              result.append(tree.GetItemData(item)[0])
               item, cookie = tree.GetNextChild(parent, cookie)
           return result
 
@@ -472,22 +508,52 @@ class FtFrame(wx.Frame):
 
     def OnAdd(self, event):
         treeItemId = self.tree.GetFocusedItem()
-        print treeItemId.IsOk()
         if treeItemId.IsOk() and not treeItemId == self.treeRootId:
-            data = self.tree.GetItemData(treeItemId)
-            if isinstance(data, Curriculum):
+            newTreeItemId = None
+            prototype = None
+            if self.IsContainerNode(treeItemId) or self.tree.ItemHasChildren(treeItemId):
+                # add child for non-leaf node
+                prototype, img = self._make_prototype_by_parent(treeItemId)
+                newTreeItemId = self.tree.AppendItem(
+                    treeItemId,
+                    u"未命名",
+                    img
+                )
+                # TODO: fix here later
+                self.tree.SetItemData(newTreeItemId, [prototype, None])
+            else:
+                # add sibling for leaf node
+                # clone selected node with a blank object
+                prototype, img = self._make_prototype_by_sibling(treeItemId)
                 newTreeItemId = self.tree.InsertItem(
                     self.tree.GetItemParent(treeItemId),
                     treeItemId,
-                    "Untitled",
-                    1
+                    u"未命名",
+                    img
                 )
-                c = Curriculum("abc")
-                c.description = ''
-                c.description = ''
-                c.title = "Untitled"
-                self.tree.SetItemData(newTreeItemId, c)
-                self.tree.EditLabel(newTreeItemId)
+                self.tree.SetItemData(newTreeItemId, [prototype, None])
+            self.tree.EditLabel(newTreeItemId)
+
+    def IsContainerNode(self, treeItemId):
+        return treeItemId == self.treeCurrId or treeItemId == self.treeLessonId or treeItemId == self.treeExerciseId
+
+    def _make_prototype_by_sibling(self, treeItemId):
+        parentId = self.tree.GetItemParent(treeItemId)
+        img = self.tree.GetItemImage(treeItemId)
+        return self.tree.GetItemData(parentId)[0], img
+
+    def _make_prototype_by_parent(self, treeItemId):
+        img = None
+        data = self.tree.GetItemData(treeItemId)
+        if not data[0]:
+            img = self.tree.GetItemImage(treeItemId)
+        elif isinstance(data[0], Curriculum):
+            img = 1
+        elif isinstance(data[0], Lesson):
+            img = 2
+        elif isinstance(data[0], Exercise):
+            img = 3
+        return data[1], img
 
     def OnAbout(self, event):
         dlg = AboutDialog(self)
@@ -501,7 +567,7 @@ class FtFrame(wx.Frame):
     def OnRemove(self, event):
         treeItemId = self.tree.GetFocusedItem()
         if self.CanDelete(treeItemId):
-            data = self.tree.GetItemData(treeItemId)
+            data = self.tree.GetItemData(treeItemId)[0]
             self.tree.Delete(treeItemId)
             notebook = self.right
             page = wx.FindWindowByName(data.name_for_ui(), notebook)
@@ -514,27 +580,32 @@ class FtFrame(wx.Frame):
         return treeItemId.IsOk() and treeItemId != self.treeRootId and treeItemId != self.treeCurrId and treeItemId != self.treeLessonId and treeItemId != self.treeExerciseId
 
     def loadTree(self, bundle):
+        self._create_empty_tree()
         rootId = self.treeRootId
         currId = self.treeCurrId
         lessonId = self.treeLessonId
         exerciseId = self.treeExerciseId
+        lp = make_lesson_prototye()
+        ep = make_exercise_prototye()
+        ip = make_illustration_prototye()
+        lep = make_lesson_exercise_prototye()
         for c in bundle.curricula:
             treeItemId = self.tree.AppendItem(currId, text=c.title, image=1)
-            self.tree.SetItemData(treeItemId, c)
+            self.tree.SetItemData(treeItemId, [c, lp, treeItemId])
         for l in bundle.lessons:
             treeItemId = self.tree.AppendItem(lessonId, l.title, 2)
-            self.tree.SetItemData(treeItemId, l)
+            self.tree.SetItemData(treeItemId, [l, ep, treeItemId])
             for seq, le in enumerate(l.lesson_exercises, 1):
                 leItemId = self.tree.AppendItem(treeItemId, le.title, 5)
                 le.ui_ref_no = 'le-' + le.exercise_ref + '-' + str(seq)
-                self.tree.SetItemData(leItemId, le)
+                self.tree.SetItemData(leItemId, [le, None, leItemId])
         for e in bundle.exercises:
             treeItemId = self.tree.AppendItem(exerciseId, e.title, 3)
-            self.tree.SetItemData(treeItemId, e)
+            self.tree.SetItemData(treeItemId, [e, ip, treeItemId])
             for seq, i in enumerate(e.illustrations, 1):
                 illuItemId = self.tree.AppendItem(treeItemId, i.title, 4)
                 i.ui_ref_no = 'il-' + e.ref_no + '-' + str(seq)
-                self.tree.SetItemData(illuItemId, i)
+                self.tree.SetItemData(illuItemId, [i, None, illuItemId])
         self.tree.Expand(rootId)
         self.tree.Expand(currId)
         self.tree.Expand(lessonId)

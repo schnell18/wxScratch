@@ -36,17 +36,6 @@ class BasePanel(wx.Panel):
 
     def SetDirty(self, dirty):
         self.dirty=dirty
-        # fire EVT_FORM_DATA_CHG
-        if dirty:
-            parent = self.GetParent()
-            if isinstance(parent, wx.aui.AuiNotebook):
-                pageIndex = parent.GetPageIndex(self)
-                if not pageIndex == wx.NOT_FOUND:
-                    text = parent.GetPageText(pageIndex)
-                    if not text.startswith('*'):
-                        parent.SetPageText(pageIndex, '*' + text)
-            evt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
-            self.GetEventHandler().ProcessEvent(evt)
 
     def IsDirty(self):
         return self.dirty
@@ -57,7 +46,27 @@ class BasePanel(wx.Panel):
 
     def OnFormDataChanged(self, evt):
         self.SetDirty(True)
+        parent = self.GetParent()
+        if isinstance(parent, wx.aui.AuiNotebook):
+            pageIndex = parent.GetPageIndex(self)
+            if not pageIndex == wx.NOT_FOUND:
+                text = parent.GetPageText(pageIndex)
+                evtObj = evt.GetEventObject()
+                if isinstance(evtObj, wx.TextCtrl) and evtObj.GetName() == 'title':
+                    text = evtObj.GetValue()
+                    # update display name of related tree node
+                    self._change_tree_label(self.model[2], text)
+
+                if not text.startswith('*'):
+                    parent.SetPageText(pageIndex, '*' + text)
+        # fire EVT_FORM_DATA_CHG
+        evt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
+        self.GetEventHandler().ProcessEvent(evt)
         evt.Skip()
+
+    def _change_tree_label(self, treeItemId, text):
+        frame = wx.GetTopLevelParent(self)
+        frame.tree.SetItemText(treeItemId, text)
 
 
 class FtFileDropTarget(wx.FileDropTarget):
@@ -65,41 +74,69 @@ class FtFileDropTarget(wx.FileDropTarget):
         wx.FileDropTarget.__init__(self)
         self.parent = parent
 
+    def OnEnter(self, x, y, default):
+        # self.parent.highlightBorder()
+        # self.parent.SetCursor(wx.Cursor(wx.CURSOR_NO_ENTRY))
+        self.parent.Highlight()
+        return wx.DragCopy
+
+    def OnDragOver(self, x, y, default):
+        # self.parent.SetCursor(wx.Cursor(wx.CURSOR_NO_ENTRY))
+        return wx.DragCopy
+
+    def OnLeave(self):
+        # clear highlight
+        self.parent.Dehighlight()
+
     def OnDropFiles(self, x, y, filenames):
-        self.parent.SetPath(filenames[0])
-        return True
+        self.parent.Dehighlight()
+        return self.parent.Accept(filenames[0])
 
 
 class ImagePreviewPanel(wx.Panel):
     def __init__(self, parent, width=300, height=200, usage=None):
         wx.Panel.__init__(self, parent)
 
+        self.innerPanel = wx.Panel(self, style=wx.NO_BORDER)
+        self.innerPanel.SetBackgroundColour(wx.NullColour)
         self.width = width
         self.height = height
         self.relativePath = None
         self.usage = usage
+
         mainSizer = wx.BoxSizer(wx.VERTICAL)
-        # image preview area
-        placeholder = wx.Image(width, height)
-        placeholder.Replace(0, 0, 0, 255, 255, 255)
-        self.imgCtrl = wx.StaticBitmap(
-            self,
-            wx.ID_ANY,
-            placeholder.ConvertToBitmap()
-        )
-        dt = FtFileDropTarget(self)
-        self.imgCtrl.SetDropTarget(dt)
+        self.imgCtrl, self.captionLbl = self._create_controls()
 
         mainSizer.Add(self.imgCtrl, 1, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
-        self.captionLbl = wx.StaticText(self, wx.ID_ANY, "")
-        self.captionLbl.Wrap(-1)
-        mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
-        self.SetSizerAndFit(mainSizer)
+        mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 0)
+        self.innerPanel.SetSizerAndFit(mainSizer)
+
+        dt = FtFileDropTarget(self)
+        self.SetDropTarget(dt)
+
+        self.Bind(wx.EVT_SIZE, self.OnSize)
+
+    def OnSize(self, event):
+        size = event.GetSize()
+        self.innerPanel.SetPosition((2, 2))
+        self.innerPanel.SetSize((size.x-4, size.y-4))
+        event.Skip()
+
+    def Highlight(self):
+        self.SetBackgroundColour('green')
+        self.Refresh()
+
+    def Dehighlight(self):
+        self.SetBackgroundColour(wx.NullColour)
+        self.Refresh()
 
     def GetRelativePath(self):
         return self.relativePath
 
-    def SetPath(self, path):
+    def Accept(self, path):
+        # check if the file is of supported type
+        if not re.search(r'png$|gif$|jpg$', path):
+            return False
         # copy into bundle directory
         rel_dir = 'image'
         if self.usage:
@@ -112,16 +149,17 @@ class ImagePreviewPanel(wx.Panel):
         if self.LoadWithRelPath(self.baseDir, rel_path):
             newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
             self.GetEventHandler().ProcessEvent(newEvt)
+        return True
 
     def LoadWithRelPath(self, base_dir, rel_path):
+        self.baseDir = base_dir
         if rel_path and os.path.exists(base_dir):
-            self.baseDir = base_dir
             self.relativePath = rel_path
             fp = os.path.join(base_dir, *rel_path.split('/'))
-            return self.Load(fp)
+            return self._load(fp)
         return False
 
-    def Load(self, path):
+    def _load(self, path):
         if os.path.exists(path):
             bmp = wx.Bitmap(path)
             (width, height) = (bmp.GetWidth(), bmp.GetHeight())
@@ -131,6 +169,20 @@ class ImagePreviewPanel(wx.Panel):
             self.captionLbl.SetLabel(txt)
             return True
         return False
+
+    def _create_controls(self):
+        # image preview area
+        placeholder = wx.Image(self.width, self.height)
+        placeholder.Replace(0, 0, 0, 255, 255, 255)
+        imgCtrl = wx.StaticBitmap(
+            self.innerPanel,
+            wx.ID_ANY,
+            placeholder.ConvertToBitmap(),
+            style=wx.NO_BORDER
+        )
+        captionLbl = wx.StaticText(self.innerPanel, wx.ID_ANY, "")
+        captionLbl.Wrap(-1)
+        return imgCtrl, captionLbl
 
     def _scale_to_fit(self, bmp):
         (width, height) = (bmp.GetWidth(), bmp.GetHeight())
@@ -146,45 +198,122 @@ class ImagePreviewPanel(wx.Panel):
 
 
 class AvPreviewPanel(wx.Panel):
-    def __init__(self, parent, width=300, height=200):
+    def __init__(self, parent, usage=None, mediaType='audio', width=300, height=200):
         wx.Panel.__init__(self, parent)
 
-        mainSizer = wx.BoxSizer(wx.VERTICAL)
-        extra_args = {
-            'size'  : (width, height),
-            'style' : wx.SIMPLE_BORDER
-        }
-        if platform.system() == 'Windows':
-            extra_args['szBackend'] = wx.media.MEDIABACKEND_WMP10
-        self.mediaCtrl = wx.media.MediaCtrl(
-            self,
-            wx.ID_ANY,
-            **extra_args
-        )
-        self.mediaCtrl.SetPlaybackRate(1)
-        self.mediaCtrl.SetVolume(1)
-        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
-        mainSizer.Add(self.mediaCtrl, 1, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
-        self.captionLbl = wx.StaticText(self, wx.ID_ANY, "")
-        self.captionLbl.Wrap(-1)
-        mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
-        self.SetSizerAndFit(mainSizer)
+        self.width = width
+        self.height = height
+        self.mediaType = mediaType
+        self.usage = usage
+        self.relativePath = None
+        self.valRegex = self._create_validation_regex(mediaType)
 
-    def Load(self, path):
-        if os.path.exists(path):
-            self.mediaCtrl.Load(path)
+        self.innerPanel = wx.Panel(self, style=wx.NO_BORDER)
+        self.innerPanel.SetBackgroundColour(wx.NullColour)
+
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        self.mediaCtrl, self.captionLbl = self._create_controls()
+
+        mainSizer.Add(self.mediaCtrl, 1, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        self.innerPanel.SetSizerAndFit(mainSizer)
+
+        dt = FtFileDropTarget(self)
+        self.SetDropTarget(dt)
+
+        self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
+        self.Bind(wx.EVT_SIZE, self.OnSize)
+
+    def OnSize(self, event):
+        size = event.GetSize()
+        self.innerPanel.SetPosition((2, 2))
+        self.innerPanel.SetSize((size.x-4, size.y-4))
+        event.Skip()
+
+    def Highlight(self):
+        self.SetBackgroundColour('green')
+        self.Refresh()
+
+    def Dehighlight(self):
+        self.SetBackgroundColour(wx.NullColour)
+        self.Refresh()
+
+    def GetRelativePath(self):
+        return self.relativePath
+
+    def Accept(self, path):
+        # check if the file is of supported type
+        if not self.valRegex.search(path):
+            return False
+        # copy into bundle directory
+        rel_dir = self.mediaType
+        if self.usage:
+            rel_dir = '/'.join([rel_dir, self.usage])
+        rel_path = '/'.join([rel_dir, os.path.basename(path)])
+        dest_dir = os.path.join(self.baseDir, *rel_dir.split('/'))
+        if not os.path.exists(dest_dir):
+           os.makedirs(dest_dir)
+        copy(path, dest_dir)
+        if self.LoadWithRelPath(self.baseDir, rel_path):
+            newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
+            self.GetEventHandler().ProcessEvent(newEvt)
+        return True
+
+    def LoadWithRelPath(self, base_dir, rel_path):
+        self.baseDir = base_dir
+        if rel_path and os.path.exists(base_dir):
+            self.relativePath = rel_path
+            fp = os.path.join(base_dir, *rel_path.split('/'))
+            return self._load(fp)
+        return False
 
     def OnMediaLoaded(self, evt):
         self.mediaCtrl.Pause()
         txt = self._formatDuration(self.mediaCtrl.Length())
         self.captionLbl.SetLabel(txt)
-        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+        if platform.system() == 'Windows':
+            self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_NONE)
+        else:
+            self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+
+    def _load(self, path):
+        if os.path.exists(path):
+            return self.mediaCtrl.Load(path)
+        return False
+
+    def _create_controls(self):
+        extra_args = {
+            'size'  : (self.width, self.height),
+            'style' : wx.SIMPLE_BORDER
+        }
+        if platform.system() == 'Windows':
+            extra_args['szBackend'] = wx.media.MEDIABACKEND_WMP10
+        mediaCtrl = wx.media.MediaCtrl(
+            self.innerPanel,
+            wx.ID_ANY,
+            **extra_args
+        )
+        mediaCtrl.SetPlaybackRate(1)
+        mediaCtrl.SetVolume(1)
+        captionLbl = wx.StaticText(self.innerPanel, wx.ID_ANY, "")
+        captionLbl.Wrap(-1)
+        return (mediaCtrl, captionLbl)
 
     def _formatDuration(self, milli_seconds):
         seconds = milli_seconds / 1000 % 60
         mins = milli_seconds / 1000 / 60 % 60
         hours = milli_seconds / 1000 / 3600 % 60
         return u"时长 %02d:%02d:%02d" % (hours, mins, seconds)
+
+    def _create_validation_regex(self, mediaType):
+        regex = None
+        if mediaType == 'audio':
+            regex = re.compile(r'mp3$')
+        elif mediaType == 'image':
+            regex = re.compile(r'png$|jpg$|gif$')
+        else:
+            regex = re.compile(r'mp4$')
+        return regex
 
     def __del__(self):
         if self.mediaCtrl and self.mediaCtrl.GetState() == wx.media.MEDIASTATE_PLAYING:
@@ -210,13 +339,18 @@ class LessonAudioPanel(wx.Panel):
         )
         self.dvAudio.SetMinSize((-1, 120))
 
-        self.colPos = self.dvAudio.AppendTextColumn(
-            label=u"位置",
-            width=50
+        # prevent in-place editting
+        render = wx.dataview.DataViewSpinRenderer(
+            1,
+            10000,
+            mode=wx.dataview.DATAVIEW_CELL_INERT
         )
+        dvPos = wx.dataview.DataViewColumn(u"位置", render, 0, width=150)
+        self.colPos = self.dvAudio.AppendColumn(dvPos)
         self.colAudio = self.dvAudio.AppendTextColumn(
             label=u"音频",
-            width=200
+            width=360,
+            mode=wx.dataview.DATAVIEW_CELL_EDITABLE
         )
         mainSizer.Add(self.dvAudio, 7, wx.ALL, 5)
         self.Bind(
@@ -232,7 +366,6 @@ class LessonAudioPanel(wx.Panel):
         self.upBtn   = wx.Button( self, wx.ID_ANY, u"上移")
         self.downBtn = wx.Button( self, wx.ID_ANY, u"下移")
 
-        self.addBtn.Enable(False)
         self.delBtn.Enable(False)
         self.upBtn.Enable(False)
         self.downBtn.Enable(False)
@@ -246,14 +379,68 @@ class LessonAudioPanel(wx.Panel):
         self.SetSizer(mainSizer)
         self.Layout()
 
+        self.Bind(wx.EVT_BUTTON, self.OnAdd,  self.addBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnDel,  self.delBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnUp,   self.upBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnDown, self.downBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnFormDataChanged)
+        self.Bind(wx.dataview.EVT_DATAVIEW_ITEM_VALUE_CHANGED, self.OnFormDataChanged)
+
     def OnSelected(self, evt):
-        self.addBtn.Enable(True)
         self.delBtn.Enable(True)
         self.upBtn.Enable(True)
         self.downBtn.Enable(True)
 
+    def OnFormDataChanged(self, evt):
+        # fire EVT_SUB_FORM_DATA_CHG
+        newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
+        self.GetEventHandler().ProcessEvent(newEvt)
+        evt.Skip()
+
+    def OnAdd(self, evt):
+        pos = self._get_max_position()
+        self.dvAudio.AppendItem([pos + 1, u'audio/act/FIXME.mp3'])
+
+    def OnDel(self, evt):
+        row = self.dvAudio.GetSelectedRow()
+        if not row == wx.NOT_FOUND:
+            self.dvAudio.DeleteItem(row)
+
+    def OnUp(self, evt):
+        row = self.dvAudio.GetSelectedRow()
+        if row != wx.NOT_FOUND and row > 0:
+            old = [
+                self.dvAudio.GetValue(row, 0),
+                self.dvAudio.GetValue(row, 1)
+            ]
+            self.dvAudio.DeleteItem(row)
+            self.dvAudio.InsertItem(row - 1, old)
+            self.dvAudio.SelectRow(row - 1)
+
+    def OnDown(self, evt):
+        row = self.dvAudio.GetSelectedRow()
+        if row != wx.NOT_FOUND and row < self.dvAudio.GetItemCount() - 1:
+            old = self._get_row_data(row)
+            self.dvAudio.DeleteItem(row)
+            self.dvAudio.InsertItem(row + 1, old)
+            self.dvAudio.SelectRow(row + 1)
+
     def AddRow(self, row):
         self.dvAudio.AppendItem(row)
+
+    def _get_max_position(self):
+        max_pos = 1
+        for i in range(self.dvAudio.GetItemCount()):
+            pos = int(self.dvAudio.GetValue(i, 0))
+            if max_pos < pos:
+               max_pos = pos
+        return max_pos
+
+    def _get_row_data(self, row):
+        return [
+            self.dvAudio.GetValue(row, 0),
+            self.dvAudio.GetValue(row, 1)
+        ]
 
 
 class CurriLessonPanel(wx.Panel):
@@ -275,13 +462,14 @@ class CurriLessonPanel(wx.Panel):
         )
         self.dvLesson.SetMinSize((-1, 150))
 
+        # TODO: reset choices when new lesson is added
         choices = self._get_lesson_refnos()
         # prevent in-place editting
         render = wx.dataview.DataViewChoiceRenderer(
             choices,
             mode=wx.dataview.DATAVIEW_CELL_INERT
         )
-        dvCol = wx.dataview.DataViewColumn(u"编码", render, 0, width=150)
+        dvCol = wx.dataview.DataViewColumn(u"编号", render, 0, width=150)
         self.colRefNo = self.dvLesson.AppendColumn(dvCol)
         self.colTitle = self.dvLesson.AppendTextColumn(
             label=u"标题",
@@ -324,16 +512,16 @@ class CurriLessonPanel(wx.Panel):
         self.SetSizer(mainSizer)
         self.Layout()
 
+    def OnSelected(self, evt):
+        self.delBtn.Enable(True)
+        self.upBtn.Enable(True)
+        self.downBtn.Enable(True)
+
     def OnFormDataChanged(self, evt):
         # fire EVT_SUB_FORM_DATA_CHG
         newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
         self.GetEventHandler().ProcessEvent(newEvt)
         evt.Skip()
-
-    def OnSelected(self, evt):
-        self.delBtn.Enable(True)
-        self.upBtn.Enable(True)
-        self.downBtn.Enable(True)
 
     def OnAdd(self, evt):
         ref_no = self._get_lesson_refnos()[0]
@@ -387,7 +575,7 @@ class CurriLessonPanel(wx.Panel):
 
 class CurriculumPanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -408,13 +596,6 @@ class CurriculumPanel(BasePanel):
             wx.VERTICAL
         )
 
-        bifSizer = wx.FlexGridSizer(7, 3, 0, 0)
-        bifSizer.AddGrowableCol(1)
-        bifSizer.AddGrowableRow(2)
-        bifSizer.SetFlexibleDirection(wx.BOTH)
-        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
-        biSizer.Add(bifSizer, 0, wx.ALL | wx.EXPAND, 5)
-
         self.refNoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
@@ -424,7 +605,6 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.refNoLabel.Wrap(-1)
-        bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
 
         self.refNoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -434,8 +614,6 @@ class CurriculumPanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.Add(100, -1)
 
         self.titleLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -446,18 +624,12 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.titleLabel.Wrap(-1)
-        bifSizer.Add(self.titleLabel, 0, wx.ALL, 5)
 
         self.titleText = wx.TextCtrl(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            id=wx.ID_ANY,
+            name='title'
         )
-        bifSizer.Add(self.titleText, 1, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.decriptionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -468,7 +640,6 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.decriptionLabel.Wrap(-1)
-        bifSizer.Add(self.decriptionLabel, 0, wx.ALL, 5)
 
         self.descriptionText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -476,8 +647,6 @@ class CurriculumPanel(BasePanel):
             size=(-1, 40),
             style=wx.TE_MULTILINE
         )
-        bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.cornerTypeLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -488,7 +657,6 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.cornerTypeLabel.Wrap(-1)
-        bifSizer.Add(self.cornerTypeLabel, 0, wx.ALL, 5)
 
         cornerTypes = [u'无', u'新', u'推荐', u'热门']
         self.cornerTypeChoice = wx.Choice(
@@ -500,8 +668,6 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.cornerTypeChoice.SetSelection(0)
-        bifSizer.Add(self.cornerTypeChoice, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.previewVideoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -512,7 +678,6 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.previewVideoLabel.Wrap(-1)
-        bifSizer.Add(self.previewVideoLabel, 0, wx.ALL, 5)
 
         self.previewVideoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -522,7 +687,7 @@ class CurriculumPanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.previewVideoText, 0, wx.ALL|wx.EXPAND, 5)
+
         self.previewVideoText.Bind(wx.EVT_TEXT, self.OnVideoChanged)
 
         # video preview area
@@ -541,7 +706,6 @@ class CurriculumPanel(BasePanel):
         self.mediaCtrl.SetPlaybackRate(1)
         self.mediaCtrl.SetVolume(1)
         self.Bind(wx.media.EVT_MEDIA_LOADED, self.OnMediaLoaded)
-        bifSizer.Add(self.mediaCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL, 5)
 
         self.coverLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -552,15 +716,12 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.coverLabel.Wrap(-1)
-        bifSizer.Add(self.coverLabel, 0, wx.ALL, 5)
 
         self.coverPanel = ImagePreviewPanel(
             biSizer.GetStaticBox(),
             width=300,
             height=100
         )
-        bifSizer.Add(self.coverPanel, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.iconLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -571,15 +732,40 @@ class CurriculumPanel(BasePanel):
             0
         )
         self.iconLabel.Wrap(-1)
-        bifSizer.Add(self.iconLabel, 0, wx.ALL, 5)
 
         self.iconPanel = ImagePreviewPanel(
             biSizer.GetStaticBox(),
             width=150,
             height=100
         )
+
+        bifSizer = wx.FlexGridSizer(7, 3, 0, 0)
+        bifSizer.AddGrowableCol(1)
+        bifSizer.AddGrowableRow(2)
+        bifSizer.SetFlexibleDirection(wx.BOTH)
+        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+        bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(100, -1)
+        bifSizer.Add(self.titleLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.titleText, 1, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.decriptionLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.cornerTypeLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.cornerTypeChoice, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.previewVideoLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.previewVideoText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(self.mediaCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL, 5)
+        bifSizer.Add(self.coverLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.coverPanel, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.iconLabel, 0, wx.ALL, 5)
         bifSizer.Add(self.iconPanel, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(1)
+        biSizer.Add(bifSizer, 0, wx.ALL | wx.EXPAND, 5)
 
         lessonsSizer = wx.StaticBoxSizer(
             wx.StaticBox(
@@ -629,7 +815,7 @@ class CurriculumPanel(BasePanel):
         self.Layout()
 
     def LoadModel(self):
-        model = self.model
+        model = self.model[0]
         self.refNoText.ChangeValue(
             model.ref_no if model.ref_no else ''
         )
@@ -665,7 +851,7 @@ class CurriculumPanel(BasePanel):
         self.iconPanel.LoadWithRelPath(base_dir, model.icon)
 
     def SaveModel(self):
-        model = self.model
+        model = self.model[0]
         model.ref_no = self.refNoText.GetValue()
         model.title = self.titleText.GetValue()
         model.description = self.descriptionText.GetValue()
@@ -707,7 +893,7 @@ class CurriculumPanel(BasePanel):
 
 class LessonPanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -728,22 +914,15 @@ class LessonPanel(BasePanel):
             wx.VERTICAL
         )
 
-        bifSizer = wx.FlexGridSizer(7, 3, 0, 0)
-        bifSizer.AddGrowableCol(1)
-        # bifSizer.AddGrowableRow(3)
-        bifSizer.SetFlexibleDirection(wx.BOTH)
-        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
-
         self.refNoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
-            u"子课编码",
+            u"子课编号",
             wx.DefaultPosition,
             wx.DefaultSize,
             0
         )
         self.refNoLabel.Wrap(-1)
-        bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
 
         self.refNoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -753,10 +932,8 @@ class LessonPanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
-        self.TextLabel = wx.StaticText(
+        self.typeLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             u"类型",
@@ -764,8 +941,7 @@ class LessonPanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        self.TextLabel.Wrap(-1)
-        bifSizer.Add(self.TextLabel, 0, wx.ALL, 5)
+        self.typeLabel.Wrap(-1)
 
         typeChoices = [u'健身', u'瑜伽']
         self.typeChoice = wx.Choice(
@@ -777,8 +953,6 @@ class LessonPanel(BasePanel):
             0
         )
         self.typeChoice.SetSelection(0)
-        bifSizer.Add(self.typeChoice, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.titleLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -789,18 +963,12 @@ class LessonPanel(BasePanel):
             0
         )
         self.titleLabel.Wrap(-1)
-        bifSizer.Add(self.titleLabel, 0, wx.ALL, 5)
 
         self.titleText = wx.TextCtrl(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            id=wx.ID_ANY,
+            name='title'
         )
-        bifSizer.Add(self.titleText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.descriptionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -811,7 +979,6 @@ class LessonPanel(BasePanel):
             0
         )
         self.descriptionLabel.Wrap(-1)
-        bifSizer.Add(self.descriptionLabel, 0, wx.ALL, 5)
 
         self.descriptionText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -821,8 +988,6 @@ class LessonPanel(BasePanel):
             wx.Size(-1, 80),
             wx.TE_MULTILINE
         )
-        bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.encourageLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -833,7 +998,6 @@ class LessonPanel(BasePanel):
             0
         )
         self.encourageLabel.Wrap(-1)
-        bifSizer.Add(self.encourageLabel, 0, wx.ALL, 5)
 
         self.encourageText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -843,9 +1007,6 @@ class LessonPanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.encourageText, 0, wx.ALL|wx.EXPAND, 5)
-
-        bifSizer.AddSpacer(1)
 
         self.nextDayIntroLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -856,7 +1017,6 @@ class LessonPanel(BasePanel):
             0
         )
         self.nextDayIntroLabel.Wrap(-1)
-        bifSizer.Add(self.nextDayIntroLabel, 0, wx.ALL, 5)
 
         self.nextDayIntroText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -866,9 +1026,6 @@ class LessonPanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.nextDayIntroText, 0, wx.ALL|wx.EXPAND, 5)
-
-        bifSizer.AddSpacer(1)
 
         self.bgmMusicLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -879,47 +1036,45 @@ class LessonPanel(BasePanel):
             0
         )
         self.bgmMusicLabel.Wrap(-1)
+
+        self.prAudio = AvPreviewPanel(
+            biSizer.GetStaticBox(),
+            width=150,
+            height=100,
+            usage='bgm'
+        )
+
+        bifSizer = wx.FlexGridSizer(7, 3, 0, 0)
+        bifSizer.AddGrowableCol(1)
+        # bifSizer.AddGrowableRow(3)
+        bifSizer.SetFlexibleDirection(wx.BOTH)
+        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+
+        bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.typeLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.typeChoice, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.titleLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.titleText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.descriptionLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.descriptionText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.encourageLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.encourageText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.nextDayIntroLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.nextDayIntroText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
         bifSizer.Add(self.bgmMusicLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.prAudio, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(100, 0)
 
-        self.bgmMusicText = wx.TextCtrl(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.bgmMusicText, 0, wx.ALL|wx.EXPAND, 5)
-        self.bgmMusicText.Bind(wx.EVT_TEXT, self.OnBgmChanged)
-
-        self.bmgMusicBtn = wx.Button(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            u"浏览",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.bmgMusicBtn, 0, wx.ALL, 5)
         biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
 
-        prSizer = wx.StaticBoxSizer(
-            wx.StaticBox(
-                self.scrollWin,
-                wx.ID_ANY,
-                u"预览"
-            ),
-            wx.HORIZONTAL
-        )
-
-        vSizer = wx.BoxSizer(wx.VERTICAL)
-        # audio preview area
-        self.prAudio = AvPreviewPanel(prSizer.GetStaticBox())
-        vSizer.Add(self.prAudio, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
-        prSizer.Add(vSizer, 0, wx.ALL, 5)
-
-        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
-        scrollSizer.Add(prSizer, 1, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
 
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
@@ -929,34 +1084,25 @@ class LessonPanel(BasePanel):
         self.SetSizer(panelSizer)
 
     def LoadModel(self):
-        model = self.model
+        model = self.model[0]
         self.refNoText.ChangeValue(model.ref_no)
         self.typeChoice.SetSelection(model.type - 1)
         self.titleText.ChangeValue(model.title)
         self.descriptionText.ChangeValue(model.description)
         self.encourageText.ChangeValue(model.encouragement)
         self.nextDayIntroText.ChangeValue(model.next_day_intro)
-        self.bgmMusicText.ChangeValue(model.bg_music)
-        self._loadAudio()
+        frame = wx.GetTopLevelParent(self)
+        self.prAudio.LoadWithRelPath(frame.bundle.path, model.bg_music)
 
     def SaveModel(self):
-        model = self.model
+        model = self.model[0]
         model.ref_no = self.refNoText.GetValue()
         model.type = self.typeChoice.GetSelection() + 1
         model.title = self.titleText.GetValue()
         model.description = self.descriptionText.GetValue()
         model.encouragement = self.encourageText.GetValue()
         model.next_day_intro = self.nextDayIntroText.GetValue()
-        model.bg_music = self.bgmMusicText.GetValue()
-
-    def OnBgmChanged(self, evt):
-        self._loadAudio()
-
-    def _loadAudio(self):
-        path = self.bgmMusicText.GetValue()
-        frame = wx.GetTopLevelParent(self)
-        fp = os.path.join(frame.bundle.path, *path.split('/'))
-        self.prAudio.Load(fp)
+        model.bg_music = self.prAudio.GetRelativePath()
 
     def __del__(self):
         pass
@@ -964,7 +1110,7 @@ class LessonPanel(BasePanel):
 
 class LessonExercisePanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -993,7 +1139,7 @@ class LessonExercisePanel(BasePanel):
         self.refNoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
-            u"动作编码"
+            u"动作编号"
         )
         self.refNoLabel.Wrap(-1)
         bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
@@ -1078,10 +1224,10 @@ class LessonExercisePanel(BasePanel):
         self.scrollWin.Layout()
         panelSizer.Add(self.scrollWin, 1, wx.EXPAND)
         self.LoadModel()
-        self.SetSizer(panelSizer)
+        self.SetSizerAndFit(panelSizer)
 
     def LoadModel(self):
-        model = self.model
+        model = self.model[0]
         self.refNoText.ChangeValue(model.exercise_ref)
         self.measureChoice.SetSelection(model.measure - 1)
         self.repetitionSpin.SetValue(model.repetition)
@@ -1097,7 +1243,7 @@ class LessonExercisePanel(BasePanel):
             self.midVoices.AddRow(row)
 
     def SaveModel(self):
-        model = self.model
+        model = self.model[0]
         model.exercise_ref = self.refNoText.GetValue()
         model.measure = self.measureChoice.GetSelection() + 1
         model.repetition = self.repetitionSpin.GetValue()
@@ -1109,7 +1255,7 @@ class LessonExercisePanel(BasePanel):
 
 class ExercisePanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -1130,11 +1276,6 @@ class ExercisePanel(BasePanel):
             wx.VERTICAL
         )
 
-        bifSizer = wx.FlexGridSizer(8, 3, 0, 0)
-        bifSizer.AddGrowableCol(1)
-        bifSizer.SetFlexibleDirection(wx.BOTH)
-        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
-
         self.exerciseRefNoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
@@ -1144,7 +1285,6 @@ class ExercisePanel(BasePanel):
             0
         )
         self.exerciseRefNoLabel.Wrap(-1)
-        bifSizer.Add(self.exerciseRefNoLabel, 0, wx.ALL, 5)
 
         self.exerciseRefNoText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -1154,8 +1294,6 @@ class ExercisePanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.exerciseRefNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.typeLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -1166,7 +1304,6 @@ class ExercisePanel(BasePanel):
             0
         )
         self.typeLabel.Wrap(-1)
-        bifSizer.Add(self.typeLabel, 0, wx.ALL, 5)
 
         typeChoices = [u'练习', u'休息']
         self.typeChoice = wx.Choice(
@@ -1178,8 +1315,6 @@ class ExercisePanel(BasePanel):
             0
         )
         self.typeChoice.SetSelection(0)
-        bifSizer.Add(self.typeChoice, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.nameLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -1190,7 +1325,6 @@ class ExercisePanel(BasePanel):
             0
         )
         self.nameLabel.Wrap(-1)
-        bifSizer.Add(self.nameLabel, 0, wx.ALL, 5)
 
         self.nameText = wx.TextCtrl(
             biSizer.GetStaticBox(),
@@ -1200,8 +1334,6 @@ class ExercisePanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        bifSizer.Add(self.nameText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.titleLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -1212,18 +1344,12 @@ class ExercisePanel(BasePanel):
             0
         )
         self.titleLabel.Wrap(-1)
-        bifSizer.Add(self.titleLabel, 0, wx.ALL, 5)
 
         self.titleText = wx.TextCtrl(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            id=wx.ID_ANY,
+            name='title'
         )
-        bifSizer.Add(self.titleText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.caloriesLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -1234,7 +1360,6 @@ class ExercisePanel(BasePanel):
             0
         )
         self.caloriesLabel.Wrap(-1)
-        bifSizer.Add(self.caloriesLabel, 0, wx.ALL, 5)
 
         self.caloriesSpin = wx.SpinCtrl(
             biSizer.GetStaticBox(),
@@ -1245,8 +1370,6 @@ class ExercisePanel(BasePanel):
             0,
             max=100000
         )
-        bifSizer.Add(self.caloriesSpin, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.durationLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -1257,7 +1380,6 @@ class ExercisePanel(BasePanel):
             0
         )
         self.durationLabel.Wrap(-1)
-        bifSizer.Add(self.durationLabel, 0, wx.ALL, 5)
 
         self.durationSpin = wx.SpinCtrl(
             biSizer.GetStaticBox(),
@@ -1268,10 +1390,9 @@ class ExercisePanel(BasePanel):
             0,
             max=100000
         )
-        bifSizer.Add(self.durationSpin, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
-        self.thumbnailLabel = wx.StaticText(
+        # image preview area
+        self.previewImgLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             u"预览图",
@@ -1279,30 +1400,10 @@ class ExercisePanel(BasePanel):
             wx.DefaultSize,
             0
         )
-        self.thumbnailLabel.Wrap(-1)
-        bifSizer.Add(self.thumbnailLabel, 0, wx.ALL, 5)
+        self.previewImgLabel.Wrap(-1)
+        self.prImg = ImagePreviewPanel(biSizer.GetStaticBox(), usage='act')
 
-        self.thumbnailText = wx.TextCtrl(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.thumbnailText, 0, wx.ALL|wx.EXPAND, 5)
-        self.thumbnailText.Bind(wx.EVT_TEXT, self.OnThumbnailChanged)
-
-        self.thumbnailBtn = wx.Button(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            u"浏览",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.thumbnailBtn, 0, wx.ALL, 5)
-
+        # video preview area
         self.videoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
@@ -1312,47 +1413,44 @@ class ExercisePanel(BasePanel):
             0
         )
         self.videoLabel.Wrap(-1)
+        self.prVideo = AvPreviewPanel(
+            biSizer.GetStaticBox(),
+            usage='act',
+            mediaType='video'
+        )
+
+
+        bifSizer = wx.FlexGridSizer(8, 3, 0, 0)
+        bifSizer.AddGrowableCol(1)
+        bifSizer.SetFlexibleDirection(wx.BOTH)
+        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+        bifSizer.Add(self.exerciseRefNoLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.exerciseRefNoText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.typeLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.typeChoice, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.nameLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.nameText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.titleLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.titleText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.caloriesLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.caloriesSpin, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.durationLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.durationSpin, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(100, 0)
+        bifSizer.Add(self.previewImgLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.prImg, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
         bifSizer.Add(self.videoLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.prVideo, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        biSizer.Add(bifSizer, 0, wx.ALL | wx.EXPAND, 5)
 
-        self.videoText = wx.TextCtrl(
-            biSizer.GetStaticBox(),
-            id=wx.ID_ANY
-        )
-        bifSizer.Add(self.videoText, 0, wx.ALL|wx.EXPAND, 5)
-        self.videoText.Bind(wx.EVT_TEXT, self.OnVideoChanged)
-
-        self.videoBtn = wx.Button(
-            biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            u"浏览",
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
-        )
-        bifSizer.Add(self.videoBtn, 0, wx.ALL, 5)
-        biSizer.Add(bifSizer, 1, wx.EXPAND, 5)
-
-        prSizer = wx.StaticBoxSizer(
-            wx.StaticBox(
-                self.scrollWin,
-                wx.ID_ANY,
-                u"预览"
-            ),
-            wx.HORIZONTAL
-        )
-
-        gSizer = wx.GridSizer(1, 2, hgap=4, vgap=4)
-        # image preview area
-        self.prImg = ImagePreviewPanel(prSizer.GetStaticBox())
-        gSizer.Add(self.prImg, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
-        # video preview area
-        self.prVideo = AvPreviewPanel(prSizer.GetStaticBox())
-        gSizer.Add(self.prVideo, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
-
-        prSizer.Add(gSizer, 0, wx.ALL, 5)
-
-        scrollSizer.Add(biSizer, 0, wx.EXPAND | wx.ALL, 5)
-        scrollSizer.Add(prSizer, 1, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(biSizer, 1, wx.EXPAND | wx.ALL, 5)
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
         scrollSizer.Fit(self.scrollWin)
@@ -1362,20 +1460,20 @@ class ExercisePanel(BasePanel):
         self.Layout()
 
     def LoadModel(self):
-        model = self.model
+        model = self.model[0]
         self.exerciseRefNoText.ChangeValue(model.ref_no)
         self.typeChoice.SetSelection(model.type - 1)
         self.durationSpin.SetValue(model.duration)
         self.titleText.ChangeValue(model.title)
         if model.type == 1:
+            frame = wx.GetTopLevelParent(self)
             self.nameText.ChangeValue(model.action)
             self.caloriesSpin.SetValue(model.calories)
-            self.thumbnailText.ChangeValue(model.thumbnail)
-            self.videoText.ChangeValue(model.video_name)
-            self._loadPreview()
+            self.prImg.LoadWithRelPath(frame.bundle.path, model.thumbnail)
+            self.prVideo.LoadWithRelPath(frame.bundle.path, model.video_name)
 
     def SaveModel(self):
-        model = self.model
+        model = self.model[0]
         model.ref_no = self.exerciseRefNoText.GetValue()
         model.type = self.typeChoice.GetSelection() + 1
         model.duration = self.durationSpin.GetValue()
@@ -1383,30 +1481,8 @@ class ExercisePanel(BasePanel):
         if model.type == 1:
             model.action = self.nameText.GetValue()
             model.calories = self.caloriesSpin.GetValue()
-            model.thumbnail = self.thumbnailText.GetValue()
-            model.video_name = self.videoText.GetValue()
-
-    def OnThumbnailChanged(self, evt):
-        self._loadThumbnail()
-
-    def OnVideoChanged(self, evt):
-        self._loadVideo()
-
-    def _loadPreview(self):
-        self._loadThumbnail()
-        self._loadVideo()
-
-    def _loadThumbnail(self):
-        path = self.thumbnailText.GetValue()
-        frame = wx.GetTopLevelParent(self)
-        fp = os.path.join(frame.bundle.path, *path.split('/'))
-        self.prImg.Load(fp)
-
-    def _loadVideo(self):
-        path = self.videoText.GetValue()
-        frame = wx.GetTopLevelParent(self)
-        fp = os.path.join(frame.bundle.path, *path.split('/'))
-        self.prVideo.Load(fp)
+            model.thumbnail = self.prImg.GetRelativePath()
+            model.video_name = self.prVideo.GetRelativePath()
 
     def __del__(self):
         pass
@@ -1414,7 +1490,7 @@ class ExercisePanel(BasePanel):
 
 class IllustrationPanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model.name_for_ui())
+        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -1453,11 +1529,8 @@ class IllustrationPanel(BasePanel):
 
         self.illuTitleText = wx.TextCtrl(
             illuSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.EmptyString,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            0
+            id=wx.ID_ANY,
+            name='title'
         )
         bifSizer.Add(self.illuTitleText, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(100)
@@ -1508,30 +1581,30 @@ class IllustrationPanel(BasePanel):
         self.Layout()
 
     def LoadModel(self):
-        model = self.model
+        model = self.model[0]
         self.illuTitleText.ChangeValue(model.title)
         self.illuDescriptionText.ChangeValue(model.description)
         self._layout_images()
 
     def SaveModel(self):
-        model = self.model
+        model = self.model[0]
         model.title = self.illuTitleText.GetValue()
         model.description = self.illuDescriptionText.GetValue()
         # TODO: save images
 
     def _layout_images(self):
-        if self.model.images:
+        model = self.model[0]
+        if model.images:
             self.gSizer.Clear(delete_windows=True)
             frame = wx.GetTopLevelParent(self)
-            for path in self.model.images:
-                fp = os.path.join(frame.bundle.path, *path.split('/'))
-                if os.path.exists(fp):
-                    prImage = ImagePreviewPanel(
-                        self.prSizer.GetStaticBox(),
-                        width=500,
-                        height=300
-                    )
-                    prImage.Load(fp)
-                    self.gSizer.Add(prImage, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+            for path in model.images:
+                prImage = ImagePreviewPanel(
+                    self.prSizer.GetStaticBox(),
+                    usage='illu',
+                    width=500,
+                    height=300
+                )
+                prImg.LoadWithRelPath(frame.bundle.path, path)
+                self.gSizer.Add(prImage, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
 
 
