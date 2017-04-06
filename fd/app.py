@@ -6,6 +6,7 @@ import os
 import wx
 import wx.aui
 import wx.html
+import wx.lib.inspection
 from fitness.uilib import BasePanel
 from fitness.uilib import IllustrationPanel
 from fitness.uilib import ExercisePanel
@@ -32,6 +33,15 @@ from os.path import join
 from shutil import copy
 from datetime import datetime
 
+
+class AutoNumber:
+    def __init__(self, *names):
+        self.__bucket__ = {key: 0 for key in names}
+
+    def acquire(self, name):
+        val = self.__bucket__[name]
+        self.__bucket__[name] += 1
+        return val
 
 class AboutDialog(wx.Dialog):
     text = '''
@@ -86,6 +96,7 @@ class FtFrame(wx.Frame):
             style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL
         )
         self.bundle = None
+        self.autoNumber = AutoNumber('curriculum', 'lesson', 'exercise')
 
         # create status bar
         self.createStatusBar()
@@ -159,6 +170,7 @@ class FtFrame(wx.Frame):
                 ("&Close" , u"关闭课程包" , self.OnClose) ,
                 ("&Save" , u"保存课程包" , self.OnSave) ,
                 ("", "", ""),
+                ("&Inspect", u"检视", self.OnInspect),
                 ("&Quit", u"退出", self.OnCloseWindow),
                 ("&About", u"关于", self.OnAbout)
             )
@@ -185,6 +197,7 @@ class FtFrame(wx.Frame):
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
         self.tree.Bind(wx.EVT_TREE_BEGIN_DRAG, self.OnTreeBeginDrag)
         self.tree.Bind(wx.EVT_TREE_END_DRAG, self.OnTreeEndDrag)
+        self.tree.Bind(wx.EVT_CONTEXT_MENU, self.OnTreeCtxMenu)
 
         bSizer3.Add(self.tree, 3, wx.EXPAND|wx.RIGHT, 5)
         scrollWin.SetSizer(bSizer3)
@@ -221,9 +234,6 @@ class FtFrame(wx.Frame):
             (u"打开", "open.png", u"打开课程包", self.OnOpen),
             (u"关闭", "close.png", u"关闭课程包", self.OnClose),
             (u"保存", "save.png", u"保存课程包", self.OnSave),
-            ("", "", "", ""),
-            (u"增加", "add.png", u"新增", self.OnAdd),
-            (u"删除", "remove.png", u"删除", self.OnRemove),
             ("", "", "", ""),
             (u"导入", "upload.png", u"导入课程包", self.OnImport),
         )
@@ -271,6 +281,152 @@ class FtFrame(wx.Frame):
             parentData.lesson_exercises = self.get_lesson_exercises(parentItem)
             self._mark_bundle_dirty()
 
+    def OnPopupAddSibling(self, event):
+        treeItemId = self.tree.GetFocusedItem()
+        if treeItemId and treeItemId != self.treeRootId:
+            # add sibling for leaf node
+            # clone selected node with a blank object
+            prototype, img = self._get_prototype_by_sibling(treeItemId)
+            parentTreeItemId = self.tree.GetItemParent(treeItemId)
+            newTreeItemId = self.tree.InsertItem(
+                parentTreeItemId,
+                treeItemId,
+                u"未命名",
+                img
+            )
+            self.tree.SetItemData(
+                newTreeItemId,
+                [
+                    self._enhance_prototype(prototype),
+                    self._make_child_prototype(prototype),
+                    newTreeItemId
+                ]
+            )
+            self.tree.EnsureVisible(newTreeItemId)
+            self.tree.SetFocusedItem(newTreeItemId)
+            self.tree.EditLabel(newTreeItemId)
+
+    def OnPopupAddChild(self, event):
+        treeItemId = self.tree.GetFocusedItem()
+        if treeItemId and treeItemId != self.treeRootId:
+            prototype, img = self._get_prototype_by_parent(treeItemId)
+            newTreeItemId = self.tree.AppendItem(
+                treeItemId,
+                u"未命名",
+                img
+            )
+            self.tree.SetItemData(
+                newTreeItemId,
+                [
+                    self._enhance_prototype(prototype),
+                    self._make_child_prototype(prototype),
+                    newTreeItemId
+                ]
+            )
+            self.tree.EnsureVisible(newTreeItemId)
+            self.tree.SetFocusedItem(newTreeItemId)
+            self.tree.EditLabel(newTreeItemId)
+
+    def OnPopupDel(self, event):
+        treeItemId = self.tree.GetFocusedItem()
+        if self.CanDelete(treeItemId):
+            data = self.tree.GetItemData(treeItemId)
+            self.tree.Delete(treeItemId)
+            notebook = self.right
+            page = wx.FindWindowByName(str(id(data[2])), notebook)
+            if page:
+                pageIndex = notebook.GetPageIndex(page)
+                if pageIndex >= 0:
+                    notebook.DeletePage(pageIndex)
+
+    def OnTreeCtxMenu(self, event):
+        pos = event.GetPosition()
+        pos = self.tree.ScreenToClient(pos)
+        treeItemId, flag = self.tree.HitTest(pos)
+        if treeItemId and flag & (wx.TREE_HITTEST_ONITEMICON | wx.TREE_HITTEST_ONITEMLABEL):
+            # exclude root node
+            if treeItemId == self.treeRootId:
+                return
+            # modify menu items according to current node
+            popupmenu = self._getContextMenu(treeItemId)
+            if popupmenu:
+                self.tree.PopupMenu(popupmenu)
+
+    def _make_child_prototype(self, prototype):
+        if isinstance(prototype, Lesson):
+            return make_lesson_exercise_prototye()
+        if isinstance(prototype, Exercise):
+            return make_illustration_prototye()
+        else:
+            return None
+
+    def _enhance_prototype(self, prototype):
+        if isinstance(prototype, Curriculum):
+            prototype.ref_no = 'c%s%02d' % ('ab', self.autoNumber.acquire('curriculum'))
+        elif isinstance(prototype, Lesson):
+            prototype.ref_no = 'l%s%03d' % ('ab', self.autoNumber.acquire('lesson'))
+        elif isinstance(prototype, Exercise):
+            prototype.ref_no = 'e%s%04d' % ('ab', self.autoNumber.acquire('exercise'))
+        return prototype
+
+    def _getContextMenu(self, treeItemId):
+        popmenuData = None
+        if treeItemId == self.treeCurrId:
+            popmenuData = [
+                (u"新增课程" , 1000 , True, self.OnPopupAddChild)  ,
+                (u"删除"     , 1002 , False, self.OnPopupDel)
+            ]
+        elif treeItemId == self.treeLessonId:
+            popmenuData = [
+                (u"新增子课" , 1000 , True  , self.OnPopupAddChild) ,
+                (u"删除"     , 1002 , False , self.OnPopupDel)
+            ]
+        elif treeItemId == self.treeExerciseId:
+            popmenuData = [
+                (u"新增动作" , 1000 , True  , self.OnPopupAddChild) ,
+                (u"删除"     , 1002 , False , self.OnPopupDel)
+            ]
+        else:
+            data = self.tree.GetItemData(treeItemId)
+            if not data:
+                return None
+            if isinstance(data[0], Curriculum):
+                popmenuData = [
+                    (u"新增课程" , 1000 , True , self.OnPopupAddSibling) ,
+                    (u"删除"     , 1002 , True , self.OnPopupDel)
+                ]
+            if isinstance(data[0], Lesson):
+                popmenuData = [
+                    (u"新增子课"         , 1000 , True , self.OnPopupAddSibling) ,
+                    (u"新增子课动作编排" , 1001 , True , self.OnPopupAddChild) ,
+                    (u"删除"             , 1002 , True , self.OnPopupDel)
+                ]
+            if isinstance(data[0], Exercise):
+                popmenuData = [
+                    (u"新增动作"     , 1000 , True , self.OnPopupAddSibling) ,
+                    (u"新增动作详解" , 1001 , True , self.OnPopupAddChild) ,
+                    (u"删除"         , 1002 , True , self.OnPopupDel)
+                ]
+            if isinstance(data[0], LessonExercise):
+                popmenuData = [
+                    (u"新增子课动作编排" , 1000 , True , self.OnPopupAddSibling) ,
+                    (u"删除"         , 1002 , True , self.OnPopupDel)
+                ]
+            if isinstance(data[0], Illustration):
+                popmenuData = [
+                    (u"新增动作详解" , 1000 , True , self.OnPopupAddSibling) ,
+                    (u"删除"         , 1002 , True , self.OnPopupDel)
+                ]
+
+        if popmenuData:
+            popupmenu = wx.Menu()
+            for mi in popmenuData:
+                item = popupmenu.Append(mi[1], mi[0])
+                item.Enable(mi[2])
+                self.Bind(wx.EVT_MENU, mi[3], item)
+            return popupmenu
+        return None
+
     def canDrag(self, treeItemId):
         if treeItemId:
             data = self.tree.GetItemData(treeItemId)[0]
@@ -279,12 +435,12 @@ class FtFrame(wx.Frame):
 
     def OnSelChanged(self, event):
         model = self.tree.GetItemData(event.GetItem())
-        data = model[0]
-        if not data:
+        if not model or not model[0]:
             return
+        data = model[0]
 
         notebook = self.right
-        page = wx.FindWindowByName(data.name_for_ui(), notebook)
+        page = wx.FindWindowByName(str(id(model[2])), notebook)
         pageIndex = notebook.GetPageIndex(page)
         if not page and pageIndex < 0 :
             if isinstance(data, Curriculum):
@@ -422,9 +578,9 @@ class FtFrame(wx.Frame):
         cp = make_curriculum_prototye()
         lp = make_lesson_prototye()
         ep = make_exercise_prototye()
-        self.tree.SetItemData(self.treeCurrId, [None, cp])
-        self.tree.SetItemData(self.treeLessonId, [None, lp])
-        self.tree.SetItemData(self.treeExerciseId, [None, ep])
+        self.tree.SetItemData(self.treeCurrId,     [None, cp, self.treeCurrId])
+        self.tree.SetItemData(self.treeLessonId,   [None, lp, self.treeLessonId])
+        self.tree.SetItemData(self.treeExerciseId, [None, ep, self.treeExerciseId])
 
     def _backup_meta_data(self):
         # copy bundle yml files to ~/.fitness/backup/<bundle>/META-INF
@@ -506,43 +662,13 @@ class FtFrame(wx.Frame):
         mgr_cfg = {t[0]: t[1] for t in config.items('general')}
         return Parser(mgr_cfg, db_cfg)
 
-    def OnAdd(self, event):
-        treeItemId = self.tree.GetFocusedItem()
-        if treeItemId.IsOk() and not treeItemId == self.treeRootId:
-            newTreeItemId = None
-            prototype = None
-            if self.IsContainerNode(treeItemId) or self.tree.ItemHasChildren(treeItemId):
-                # add child for non-leaf node
-                prototype, img = self._make_prototype_by_parent(treeItemId)
-                newTreeItemId = self.tree.AppendItem(
-                    treeItemId,
-                    u"未命名",
-                    img
-                )
-                # TODO: fix here later
-                self.tree.SetItemData(newTreeItemId, [prototype, None])
-            else:
-                # add sibling for leaf node
-                # clone selected node with a blank object
-                prototype, img = self._make_prototype_by_sibling(treeItemId)
-                newTreeItemId = self.tree.InsertItem(
-                    self.tree.GetItemParent(treeItemId),
-                    treeItemId,
-                    u"未命名",
-                    img
-                )
-                self.tree.SetItemData(newTreeItemId, [prototype, None])
-            self.tree.EditLabel(newTreeItemId)
-
-    def IsContainerNode(self, treeItemId):
-        return treeItemId == self.treeCurrId or treeItemId == self.treeLessonId or treeItemId == self.treeExerciseId
-
-    def _make_prototype_by_sibling(self, treeItemId):
+    def _get_prototype_by_sibling(self, treeItemId):
         parentId = self.tree.GetItemParent(treeItemId)
         img = self.tree.GetItemImage(treeItemId)
-        return self.tree.GetItemData(parentId)[0], img
+        data = self.tree.GetItemData(parentId)
+        return data[1], img
 
-    def _make_prototype_by_parent(self, treeItemId):
+    def _get_prototype_by_parent(self, treeItemId):
         img = None
         data = self.tree.GetItemData(treeItemId)
         if not data[0]:
@@ -550,9 +676,9 @@ class FtFrame(wx.Frame):
         elif isinstance(data[0], Curriculum):
             img = 1
         elif isinstance(data[0], Lesson):
-            img = 2
+            img = 5
         elif isinstance(data[0], Exercise):
-            img = 3
+            img = 4
         return data[1], img
 
     def OnAbout(self, event):
@@ -560,24 +686,12 @@ class FtFrame(wx.Frame):
         dlg.ShowModal()
         dlg.Destroy()
 
+    def OnInspect(self, evt):
+        wx.lib.inspection.InspectionTool().Show()
+
     def OnCloseWindow(self, event):
         # TODO: prompt save if content is dirty
         self.Close()
-
-    def OnRemove(self, event):
-        treeItemId = self.tree.GetFocusedItem()
-        if self.CanDelete(treeItemId):
-            data = self.tree.GetItemData(treeItemId)[0]
-            self.tree.Delete(treeItemId)
-            notebook = self.right
-            page = wx.FindWindowByName(data.name_for_ui(), notebook)
-            if page:
-                pageIndex = notebook.GetPageIndex(page)
-                if pageIndex >= 0:
-                    notebook.DeletePage(pageIndex)
-
-    def CanDelete(self, treeItemId):
-        return treeItemId.IsOk() and treeItemId != self.treeRootId and treeItemId != self.treeCurrId and treeItemId != self.treeLessonId and treeItemId != self.treeExerciseId
 
     def loadTree(self, bundle):
         self._create_empty_tree()
@@ -585,32 +699,31 @@ class FtFrame(wx.Frame):
         currId = self.treeCurrId
         lessonId = self.treeLessonId
         exerciseId = self.treeExerciseId
-        lp = make_lesson_prototye()
-        ep = make_exercise_prototye()
         ip = make_illustration_prototye()
         lep = make_lesson_exercise_prototye()
         for c in bundle.curricula:
             treeItemId = self.tree.AppendItem(currId, text=c.title, image=1)
-            self.tree.SetItemData(treeItemId, [c, lp, treeItemId])
+            self.tree.SetItemData(treeItemId, [c, None, treeItemId])
         for l in bundle.lessons:
             treeItemId = self.tree.AppendItem(lessonId, l.title, 2)
-            self.tree.SetItemData(treeItemId, [l, ep, treeItemId])
-            for seq, le in enumerate(l.lesson_exercises, 1):
+            self.tree.SetItemData(treeItemId, [l, lep, treeItemId])
+            for le in l.lesson_exercises:
                 leItemId = self.tree.AppendItem(treeItemId, le.title, 5)
-                le.ui_ref_no = 'le-' + le.exercise_ref + '-' + str(seq)
                 self.tree.SetItemData(leItemId, [le, None, leItemId])
         for e in bundle.exercises:
             treeItemId = self.tree.AppendItem(exerciseId, e.title, 3)
             self.tree.SetItemData(treeItemId, [e, ip, treeItemId])
-            for seq, i in enumerate(e.illustrations, 1):
+            for i in e.illustrations:
                 illuItemId = self.tree.AppendItem(treeItemId, i.title, 4)
-                i.ui_ref_no = 'il-' + e.ref_no + '-' + str(seq)
                 self.tree.SetItemData(illuItemId, [i, None, illuItemId])
         self.tree.Expand(rootId)
         self.tree.Expand(currId)
         self.tree.Expand(lessonId)
         self.tree.Expand(exerciseId)
         self.tree.EnsureVisible(rootId)
+
+    def CanDelete(self, treeItemId):
+        return treeItemId.IsOk() and treeItemId != self.treeRootId and treeItemId != self.treeCurrId and treeItemId != self.treeLessonId and treeItemId != self.treeExerciseId
 
 
 if __name__ == '__main__':

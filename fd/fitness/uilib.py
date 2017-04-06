@@ -575,7 +575,7 @@ class CurriLessonPanel(wx.Panel):
 
 class CurriculumPanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
+        BasePanel.__init__(self, parent, model, name=str(id(model[2])))
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -893,7 +893,7 @@ class CurriculumPanel(BasePanel):
 
 class LessonPanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
+        BasePanel.__init__(self, parent, model, name=str(id(model[2])))
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -1110,7 +1110,7 @@ class LessonPanel(BasePanel):
 
 class LessonExercisePanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
+        BasePanel.__init__(self, parent, model, name=str(id(model[2])))
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -1233,14 +1233,16 @@ class LessonExercisePanel(BasePanel):
         self.repetitionSpin.SetValue(model.repetition)
 
         # load begin voices
-        for bv in sorted(model.begin_voices, key=lambda e : e.position):
-            row = [str(bv.position), bv.audio_name]
-            self.beginVoices.AddRow(row)
+        if model.begin_voices:
+            for bv in sorted(model.begin_voices, key=lambda e : e.position):
+                row = [str(bv.position), bv.audio_name]
+                self.beginVoices.AddRow(row)
 
         # load mid voices
-        for bv in model.mid_voices:
-            row = [str(bv.position), bv.audio_name]
-            self.midVoices.AddRow(row)
+        if model.mid_voices:
+            for bv in model.mid_voices:
+                row = [str(bv.position), bv.audio_name]
+                self.midVoices.AddRow(row)
 
     def SaveModel(self):
         model = self.model[0]
@@ -1255,7 +1257,7 @@ class LessonExercisePanel(BasePanel):
 
 class ExercisePanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
+        BasePanel.__init__(self, parent, model, name=str(id(model[2])))
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,
@@ -1490,7 +1492,7 @@ class ExercisePanel(BasePanel):
 
 class IllustrationPanel(BasePanel):
     def __init__(self, parent, model):
-        BasePanel.__init__(self, parent, model, name=model[0].name_for_ui())
+        BasePanel.__init__(self, parent, model, name=str(id(model[2])))
         self.scrollWin = wx.ScrolledWindow(
             self,
             wx.ID_ANY,

@@ -42,9 +42,6 @@ class Curriculum:
     def set_next_curricula(self, next_curricula):
         self.next_curricula = next_curricula
 
-    def name_for_ui(self):
-        return self.__class__.__name__ + '-' + self.ref_no
-
     def __str__(self):
         return "ref_no: %s title: %s" % (self.ref_no, self.title)
 
@@ -66,9 +63,6 @@ class Lesson:
         self.lesson_exercises = kwargs.get("lesson_exercises")
         self.lesson_resources = kwargs.get("lesson_resources")
         self.sort_no = kwargs.get("sort_no")
-
-    def name_for_ui(self):
-        return self.__class__.__name__ + '-' + self.ref_no
 
 
 class CurriculumLesson:
@@ -101,9 +95,6 @@ class Exercise:
         self.thumbnail_tfs = kwargs.get("thumbnail_tfs")
         self.sort_no = kwargs.get("sort_no")
 
-    def name_for_ui(self):
-        return self.__class__.__name__ + '-' + self.ref_no
-
 
 class LessonExercise:
     def __init__(self, **kwargs):
@@ -113,10 +104,6 @@ class LessonExercise:
         self.measure = kwargs.get("measure")
         self.begin_voices = kwargs.get("begin_voices")
         self.mid_voices = kwargs.get("mid_voices")
-        self.ui_ref_no = None
-
-    def name_for_ui(self):
-        return self.ui_ref_no
 
 
 class Audio:
@@ -132,10 +119,6 @@ class Illustration:
         self.description = kwargs.get("description")
         self.images = kwargs.get("images")
         self.images_tfs = None
-        self.ui_ref_no = None
-
-    def name_for_ui(self):
-        return self.ui_ref_no
 
 
 class Resource:
@@ -230,6 +213,4 @@ def make_lesson_exercise_prototye():
     le.exercise_ref = ''
     le.repetition = 1
     le.measure = 1
-    # le.begin_voices =
-    # le.mid_voices =
     return le
