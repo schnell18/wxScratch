@@ -35,13 +35,20 @@ from datetime import datetime
 
 
 class AutoNumber:
-    def __init__(self, *names):
-        self.__bucket__ = {key: 0 for key in names}
+    def __init__(self, **kvargs):
+        self.__bucket__ = dict(kvargs)
 
     def acquire(self, name):
         val = self.__bucket__[name]
         self.__bucket__[name] += 1
         return val
+
+    def __setitem__(self, key, value):
+        self.__bucket__[key] = value
+
+    def __getitem__(self, key):
+        return self.__bucket__[key]
+
 
 class AboutDialog(wx.Dialog):
     text = '''
@@ -96,7 +103,15 @@ class FtFrame(wx.Frame):
             style = wx.DEFAULT_FRAME_STYLE|wx.TAB_TRAVERSAL
         )
         self.bundle = None
-        self.autoNumber = AutoNumber('curriculum', 'lesson', 'exercise')
+
+        self.autoNumber = AutoNumber(
+            curriculum=0,
+            lesson=0,
+            exercise=0,
+            image=0,
+            video=0,
+            audio=0
+        )
 
         # create status bar
         self.createStatusBar()
@@ -518,6 +533,9 @@ class FtFrame(wx.Frame):
             self.SetTitle(u'课程包: [%s]' % dlg.GetPath())
             dest_dir = self._backup_meta_data()
             self.statusbar.SetStatusText(u'课程包定义已备份至: ' + dest_dir, 0)
+            self.autoNumber['curriculum'] = len(self.bundle.curricula)
+            self.autoNumber['lesson'] = len(self.bundle.lessons)
+            self.autoNumber['exercise'] = len(self.bundle.exercises)
         dlg.Destroy()
 
     def OnClose(self, event):

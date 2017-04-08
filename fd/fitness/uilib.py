@@ -8,14 +8,24 @@ import os.path
 import re
 import platform
 from fitness.model import CurriculumLesson
+from fitness.util import validate_filename
 from shutil import copy
 
 
+ftEVT_PREVIEW_CELL_ADD  = wx.NewEventType()
+ftEVT_PREVIEW_CELL_DEL  = wx.NewEventType()
 ftEVT_FORM_DATA_CHG     = wx.NewEventType()
 ftEVT_SUB_FORM_DATA_CHG = wx.NewEventType()
+EVT_PREVIEW_CELL_ADD    = wx.PyEventBinder(ftEVT_PREVIEW_CELL_ADD, 1)
+EVT_PREVIEW_CELL_DEL    = wx.PyEventBinder(ftEVT_PREVIEW_CELL_DEL, 1)
 EVT_FORM_DATA_CHG       = wx.PyEventBinder(ftEVT_FORM_DATA_CHG, 1)
-EVT_SUB_FORM_DATA_CHG   = wx.PyEventBinder(ftEVT_SUB_FORM_DATA_CHG, 2)
+EVT_SUB_FORM_DATA_CHG   = wx.PyEventBinder(ftEVT_SUB_FORM_DATA_CHG, 1)
 
+
+def MakePlaceholder(width, height):
+    placeholder = wx.Image(width, height)
+    placeholder.Replace(0, 0, 0, 255, 255, 255)
+    return placeholder.ConvertToBitmap()
 
 class FormDataChangeEvent(wx.CommandEvent):
     def __init__(self, evtType, id):
@@ -104,6 +114,9 @@ class ImagePreviewPanel(wx.Panel):
         self.relativePath = None
         self.usage = usage
 
+        self.btnPanel = self._createButtonPanel()
+        self.btnPanel.Show(False)
+
         mainSizer = wx.BoxSizer(wx.VERTICAL)
         self.imgCtrl, self.captionLbl = self._create_controls()
 
@@ -137,15 +150,9 @@ class ImagePreviewPanel(wx.Panel):
         # check if the file is of supported type
         if not re.search(r'png$|gif$|jpg$', path):
             return False
+
+        rel_path = self._copy_file(path)
         # copy into bundle directory
-        rel_dir = 'image'
-        if self.usage:
-            rel_dir = '/'.join([rel_dir, self.usage])
-        rel_path = '/'.join([rel_dir, os.path.basename(path)])
-        dest_dir = os.path.join(self.baseDir, *rel_dir.split('/'))
-        if not os.path.exists(dest_dir):
-           os.makedirs(dest_dir)
-        copy(path, dest_dir)
         if self.LoadWithRelPath(self.baseDir, rel_path):
             newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
             self.GetEventHandler().ProcessEvent(newEvt)
@@ -159,6 +166,14 @@ class ImagePreviewPanel(wx.Panel):
             return self._load(fp)
         return False
 
+    def LoadWithPlaceHolder(self, base_dir):
+        self.baseDir = base_dir
+        placeholder = MakePlaceholder(self.width, self.height)
+        self.imgCtrl.SetBitmap(placeholder)
+        txt = u"宽高 %d X %d" % (self.width, self.height)
+        self.captionLbl.SetLabel(txt)
+        return True
+
     def _load(self, path):
         if os.path.exists(path):
             bmp = wx.Bitmap(path)
@@ -170,19 +185,63 @@ class ImagePreviewPanel(wx.Panel):
             return True
         return False
 
+    def _copy_file(self, path):
+        rel_dir = 'image'
+        if self.usage:
+            rel_dir = '/'.join([rel_dir, self.usage])
+        dest_dir = os.path.join(self.baseDir, *rel_dir.split('/'))
+        if not os.path.exists(dest_dir):
+           os.makedirs(dest_dir)
+        filename = os.path.basename(path)
+        if not validate_filename(filename):
+            filename = self._get_auto_name(path)
+        copy(path, os.path.join(dest_dir, filename))
+        rel_path = '/'.join([rel_dir, filename])
+        return rel_path
+
+    def _get_auto_name(self, path):
+        idx = path.rindex('.') + 1
+        ext_name = path[idx:]
+        frame = wx.GetTopLevelParent(self)
+        seq = frame.autoNumber.acquire('image')
+        return 'img%04d.%s' % (seq, ext_name)
+
     def _create_controls(self):
         # image preview area
-        placeholder = wx.Image(self.width, self.height)
-        placeholder.Replace(0, 0, 0, 255, 255, 255)
+        placeholder = MakePlaceholder(self.width, self.height)
         imgCtrl = wx.StaticBitmap(
             self.innerPanel,
             wx.ID_ANY,
-            placeholder.ConvertToBitmap(),
+            placeholder,
             style=wx.NO_BORDER
         )
         captionLbl = wx.StaticText(self.innerPanel, wx.ID_ANY, "")
         captionLbl.Wrap(-1)
         return imgCtrl, captionLbl
+
+    def _createButtonPanel(self):
+        btnPanel = wx.Panel(self)
+        hSizer = wx.BoxSizer(wx.HORIZONTAL)
+        img = wx.Image('addimg2.png', wx.BITMAP_TYPE_PNG)
+        bmp = img.ConvertToBitmap()
+        addBtn = wx.BitmapButton(btnPanel, bitmap=bmp)
+        img = wx.Image('delimg2.png', wx.BITMAP_TYPE_PNG)
+        bmp = img.ConvertToBitmap()
+        delBtn = wx.BitmapButton(btnPanel, bitmap=bmp)
+        hSizer.Add(addBtn, 1, wx.ALL, 5)
+        hSizer.Add(delBtn, 1, wx.ALL, 5)
+
+        self.Bind(wx.EVT_BUTTON, self.OnAddBtnPressed, addBtn)
+        self.Bind(wx.EVT_BUTTON, self.OnDelBtnPressed, delBtn)
+        btnPanel.SetSizer(hSizer)
+        btnPanel.Fit()
+        return btnPanel
+
+    def OnAddBtnPressed(self, event):
+        pass
+
+    def OnDelBtnPressed(self, event):
+        pass
 
     def _scale_to_fit(self, bmp):
         (width, height) = (bmp.GetWidth(), bmp.GetHeight())
@@ -246,14 +305,8 @@ class AvPreviewPanel(wx.Panel):
         if not self.valRegex.search(path):
             return False
         # copy into bundle directory
-        rel_dir = self.mediaType
-        if self.usage:
-            rel_dir = '/'.join([rel_dir, self.usage])
-        rel_path = '/'.join([rel_dir, os.path.basename(path)])
-        dest_dir = os.path.join(self.baseDir, *rel_dir.split('/'))
-        if not os.path.exists(dest_dir):
-           os.makedirs(dest_dir)
-        copy(path, dest_dir)
+        rel_path = self._copy_file(path)
+
         if self.LoadWithRelPath(self.baseDir, rel_path):
             newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
             self.GetEventHandler().ProcessEvent(newEvt)
@@ -280,6 +333,30 @@ class AvPreviewPanel(wx.Panel):
         if os.path.exists(path):
             return self.mediaCtrl.Load(path)
         return False
+
+    def _copy_file(self, path):
+        rel_dir = self.mediaType
+        if self.usage:
+            rel_dir = '/'.join([rel_dir, self.usage])
+        dest_dir = os.path.join(self.baseDir, *rel_dir.split('/'))
+        if not os.path.exists(dest_dir):
+           os.makedirs(dest_dir)
+        filename = os.path.basename(path)
+        if not validate_filename(filename):
+            filename = self._get_auto_name(path)
+        copy(path, os.path.join(dest_dir, filename))
+        rel_path = '/'.join([rel_dir, filename])
+        return rel_path
+
+    def _get_auto_name(self, path):
+        ext_name = os.path.basename(path).split(os.path.extsep)[1]
+        frame = wx.GetTopLevelParent(self)
+        seq = frame.autoNumber.acquire(self.mediaType)
+        return '%s%04d.%s' % (
+            'v' if self.mediaType == 'video' else 'a',
+            seq,
+            ext_name
+        )
 
     def _create_controls(self):
         extra_args = {
@@ -1500,6 +1577,7 @@ class IllustrationPanel(BasePanel):
             wx.DefaultSize,
             wx.HSCROLL|wx.VSCROLL
         )
+        self.prImgs = []
         self.scrollWin.SetScrollRate(5, 5)
         panelSizer = wx.BoxSizer(wx.HORIZONTAL)
         scrollSizer = wx.BoxSizer(wx.VERTICAL)
@@ -1513,11 +1591,6 @@ class IllustrationPanel(BasePanel):
             wx.VERTICAL
         )
 
-        bifSizer = wx.FlexGridSizer(3, 3, 0, 0)
-        bifSizer.AddGrowableCol(1)
-        bifSizer.SetFlexibleDirection(wx.BOTH)
-        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
-
         self.illuTitleLabel = wx.StaticText(
             illuSizer.GetStaticBox(),
             wx.ID_ANY,
@@ -1527,15 +1600,12 @@ class IllustrationPanel(BasePanel):
             0
         )
         self.illuTitleLabel.Wrap(-1)
-        bifSizer.Add(self.illuTitleLabel, 0, wx.ALL, 5)
 
         self.illuTitleText = wx.TextCtrl(
             illuSizer.GetStaticBox(),
             id=wx.ID_ANY,
             name='title'
         )
-        bifSizer.Add(self.illuTitleText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(100)
 
         self.illuDescriptionLabel = wx.StaticText(
             illuSizer.GetStaticBox(),
@@ -1546,7 +1616,6 @@ class IllustrationPanel(BasePanel):
             0
         )
         self.illuDescriptionLabel.Wrap(-1)
-        bifSizer.Add(self.illuDescriptionLabel, 0, wx.ALL, 5)
 
         self.illuDescriptionText = wx.TextCtrl(
             illuSizer.GetStaticBox(),
@@ -1556,24 +1625,25 @@ class IllustrationPanel(BasePanel):
             wx.Size(-1, 160),
             wx.TE_MULTILINE
         )
-        bifSizer.Add(self.illuDescriptionText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
-        illuSizer.Add(bifSizer, 1, wx.EXPAND, 5)
 
-        self.prSizer = wx.StaticBoxSizer(
-            wx.StaticBox(
-                self.scrollWin,
-                wx.ID_ANY,
-                u"详解图预览"
-            ),
-            wx.VERTICAL
-        )
+        illufSizer = wx.FlexGridSizer(3, 3, 0, 0)
+        illufSizer.AddGrowableCol(1)
+        illufSizer.SetFlexibleDirection(wx.BOTH)
+        illufSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+        illufSizer.Add(self.illuTitleLabel, 0, wx.ALL, 5)
+        illufSizer.Add(self.illuTitleText, 0, wx.ALL|wx.EXPAND, 5)
+        illufSizer.AddSpacer(100)
+        illufSizer.Add(self.illuDescriptionLabel, 0, wx.ALL, 5)
+        illufSizer.Add(self.illuDescriptionText, 0, wx.ALL|wx.EXPAND, 5)
+        illufSizer.AddSpacer(1)
 
-        self.gSizer = wx.GridSizer(1, 4, hgap=4, vgap=4)
+        self.gSizer = wx.GridSizer(0, 2, hgap=4, vgap=4)
+        illuSizer.Add(illufSizer, 0, wx.EXPAND, 5)
+        illuSizer.Add(self.gSizer, 1, wx.EXPAND | wx.ALL, 0)
 
-        scrollSizer.Add(illuSizer, 0, wx.EXPAND | wx.ALL, 5)
-        scrollSizer.Add(self.prSizer, 1, wx.EXPAND | wx.ALL, 5)
+        scrollSizer.Add(illuSizer, 1, wx.EXPAND | wx.ALL, 5)
 
+        self.illuSizer = illuSizer
         self.scrollWin.SetSizer(scrollSizer)
         self.scrollWin.Layout()
         scrollSizer.Fit(self.scrollWin)
@@ -1592,7 +1662,10 @@ class IllustrationPanel(BasePanel):
         model = self.model[0]
         model.title = self.illuTitleText.GetValue()
         model.description = self.illuDescriptionText.GetValue()
-        # TODO: save images
+        if self.prImgs:
+            model.images = []
+            for prImg in self.prImgs:
+                model.images.append(prImg.GetRelativePath())
 
     def _layout_images(self):
         model = self.model[0]
@@ -1600,13 +1673,36 @@ class IllustrationPanel(BasePanel):
             self.gSizer.Clear(delete_windows=True)
             frame = wx.GetTopLevelParent(self)
             for path in model.images:
-                prImage = ImagePreviewPanel(
-                    self.prSizer.GetStaticBox(),
+                prImg = ImagePreviewPanel(
+                    self.illuSizer.GetStaticBox(),
                     usage='illu',
-                    width=500,
-                    height=300
+                    width=280,
+                    height=210
                 )
                 prImg.LoadWithRelPath(frame.bundle.path, path)
-                self.gSizer.Add(prImage, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+                self.prImgs.append(prImg)
+                self.gSizer.Add(prImg, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+        img = wx.Image('addimg.png', wx.BITMAP_TYPE_PNG)
+        img = img.Size((100, 100), (18, 18))
+        bmp = img.ConvertToBitmap()
+        self.addBtn = wx.BitmapButton(self.illuSizer.GetStaticBox(), bitmap=bmp)
+        self.gSizer.Add(self.addBtn, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+        self.Bind(wx.EVT_BUTTON, self.OnAddIlluImg, self.addBtn)
 
+    def OnAddIlluImg(self, event):
+        self.AddIlluImg()
 
+    def AddIlluImg(self):
+        prImg = ImagePreviewPanel(
+            self.illuSizer.GetStaticBox(),
+            usage='illu',
+            width=280,
+            height=210
+        )
+        frame = wx.GetTopLevelParent(self)
+        prImg.LoadWithPlaceHolder(frame.bundle.path)
+        self.prImgs.append(prImg)
+        idx = self.gSizer.GetItemCount() - 1
+        self.gSizer.Insert(idx, prImg, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+        self.scrollWin.Layout()
+        self.Layout()

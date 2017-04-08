@@ -2,7 +2,6 @@
 
 from __future__ import print_function
 
-import re
 import os.path
 import os
 import sys
@@ -18,6 +17,7 @@ from fitness.model import LessonExercise
 from fitness.model import Illustration
 from fitness.model import Audio
 from fitness.model import ResourceSet
+from fitness.util import validate_filename
 
 
 class Parser:
@@ -147,6 +147,8 @@ class Parser:
                         illu_rec = {}
                         illu_rec['title'] = l.title
                         illu_rec['description'] = l.description
+                        if l.images:
+                            illu_rec['images'] = l.images
                         cls.append(illu_rec)
                     rec['illustrations'] = cls
             else:
@@ -414,7 +416,7 @@ class Parser:
         return curricula, lessons, exercises
 
     def _validate_file(self, prop_name, prop_value, base_dir):
-        if not re.match(r'^[-a-zA-Z0-9_/.]+$', prop_value):
+        if not validate_filename(prop_value):
             raise ValueError("%s filename: %s contains invalid char" % (prop_name, prop_value))
         file = os.path.join(base_dir, prop_value)
         if not os.path.isfile(file):
