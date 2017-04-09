@@ -14,6 +14,9 @@ from fitness.uilib import LessonPanel
 from fitness.uilib import LessonExercisePanel
 from fitness.uilib import CurriculumPanel
 from fitness.uilib import EVT_FORM_DATA_CHG
+from fitness.uilib import ftEVT_FORM_DATA_CHG
+from fitness.uilib import FormDataChangeEvent
+from fitness.images import catalog
 from fitness.imp import ImpDialog
 from fitness.parser import Parser
 from fitness.model import Bundle
@@ -127,7 +130,7 @@ class FtFrame(wx.Frame):
         for img in [
             'bundle', 'curriculum', 'lesson',
             'exercise', 'illustration', 'segment']:
-            bmp = wx.Bitmap(img + '.png', wx.BITMAP_TYPE_PNG)
+            bmp = catalog[img].GetBitmap()
             self.imageList.Add(bmp)
 
         self.sp = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE|wx.SP_3DSASH)
@@ -238,19 +241,19 @@ class FtFrame(wx.Frame):
         if not label:
             self.toolbar.AddSeparator()
             return
-        bmp = wx.Image(filename, wx.BITMAP_TYPE_PNG).ConvertToBitmap()
+        bmp = catalog[filename].GetBitmap()
         tool = self.toolbar.AddTool(-1, label, bmp, shortHelp=help)
         # tool = self.toolbar.AddTool(-1, '', bmp, shortHelp=help)
         self.Bind(wx.EVT_MENU, handler, tool)
 
     def toolbarData(self):
         return (
-            (u"新建", "new.png", u"创建新的课程包", self.OnNew),
-            (u"打开", "open.png", u"打开课程包", self.OnOpen),
-            (u"关闭", "close.png", u"关闭课程包", self.OnClose),
-            (u"保存", "save.png", u"保存课程包", self.OnSave),
-            ("", "", "", ""),
-            (u"导入", "upload.png", u"导入课程包", self.OnImport),
+            (u"新建" , "new"    , u"创建新的课程包" , self.OnNew)    ,
+            (u"打开" , "open"   , u"打开课程包"     , self.OnOpen)   ,
+            (u"关闭" , "close"  , u"关闭课程包"     , self.OnClose)  ,
+            (u"保存" , "save"   , u"保存课程包"     , self.OnSave)   ,
+            (""      , ""       , ""                , "")            ,
+            (u"导入" , "upload" , u"导入课程包"     , self.OnImport) ,
         )
 
     def createToolBar(self):
@@ -309,10 +312,11 @@ class FtFrame(wx.Frame):
                 u"未命名",
                 img
             )
+            skeleton = self._clone_prototype(prototype)
             self.tree.SetItemData(
                 newTreeItemId,
                 [
-                    self._enhance_prototype(prototype),
+                    skeleton,
                     self._make_child_prototype(prototype),
                     newTreeItemId
                 ]
@@ -320,6 +324,9 @@ class FtFrame(wx.Frame):
             self.tree.EnsureVisible(newTreeItemId)
             self.tree.SetFocusedItem(newTreeItemId)
             self.tree.EditLabel(newTreeItemId)
+            newEvt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
+            newEvt.SetDataObject(skeleton)
+            self.GetEventHandler().ProcessEvent(newEvt)
 
     def OnPopupAddChild(self, event):
         treeItemId = self.tree.GetFocusedItem()
@@ -330,10 +337,11 @@ class FtFrame(wx.Frame):
                 u"未命名",
                 img
             )
+            skeleton = self._clone_prototype(prototype)
             self.tree.SetItemData(
                 newTreeItemId,
                 [
-                    self._enhance_prototype(prototype),
+                    skeleton,
                     self._make_child_prototype(prototype),
                     newTreeItemId
                 ]
@@ -341,6 +349,9 @@ class FtFrame(wx.Frame):
             self.tree.EnsureVisible(newTreeItemId)
             self.tree.SetFocusedItem(newTreeItemId)
             self.tree.EditLabel(newTreeItemId)
+            newEvt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
+            newEvt.SetDataObject(skeleton)
+            self.GetEventHandler().ProcessEvent(newEvt)
 
     def OnPopupDel(self, event):
         treeItemId = self.tree.GetFocusedItem()
@@ -375,14 +386,22 @@ class FtFrame(wx.Frame):
         else:
             return None
 
-    def _enhance_prototype(self, prototype):
+    def _clone_prototype(self, prototype):
+        clone = None
         if isinstance(prototype, Curriculum):
-            prototype.ref_no = 'c%s%02d' % ('ab', self.autoNumber.acquire('curriculum'))
+            clone = make_curriculum_prototye()
+            clone.ref_no = 'c%s%02d' % ('ab', self.autoNumber.acquire('curriculum'))
         elif isinstance(prototype, Lesson):
-            prototype.ref_no = 'l%s%03d' % ('ab', self.autoNumber.acquire('lesson'))
+            clone = make_lesson_prototye()
+            clone.ref_no = 'l%s%03d' % ('ab', self.autoNumber.acquire('lesson'))
         elif isinstance(prototype, Exercise):
-            prototype.ref_no = 'e%s%04d' % ('ab', self.autoNumber.acquire('exercise'))
-        return prototype
+            clone = make_exercise_prototye()
+            clone.ref_no = 'e%s%04d' % ('ab', self.autoNumber.acquire('exercise'))
+        elif isinstance(prototype, LessonExercise):
+            clone = make_lesson_exercise_prototye()
+        elif isinstance(prototype, Illustration):
+            clone = make_illustration_prototye()
+        return clone
 
     def _getContextMenu(self, treeItemId):
         popmenuData = None
@@ -478,6 +497,10 @@ class FtFrame(wx.Frame):
 
     def OnFormDataChanged(self, event):
         self._mark_bundle_dirty()
+        if isinstance(event.GetDataObject(), Exercise):
+            self._update_exerise_refs()
+        if isinstance(event.GetDataObject(), Lesson):
+            self._update_lesson_refs()
 
     def _mark_bundle_dirty(self):
         self.__dirty__ = True
@@ -642,6 +665,20 @@ class FtFrame(wx.Frame):
         self.statusbar.SetStatusText(u"课程包已保存", 0)
         self.statusbar.SetStatusText(u"最近一次保存于" + self.getTimestamp(), 1)
         self._clear_dirty_indicator()
+
+    def _update_exerise_refs(self):
+        notebook = self.right
+        for i in range(notebook.GetPageCount()):
+            panel = notebook.GetPage(i)
+            if isinstance(panel, LessonExercisePanel):
+                panel.UpdateExerciseSource()
+
+    def _update_lesson_refs(self):
+        notebook = self.right
+        for i in range(notebook.GetPageCount()):
+            panel = notebook.GetPage(i)
+            if isinstance(panel, CurriculumPanel):
+                panel.UpdateLessonSource()
 
     def _clear_dirty_indicator(self):
         # clear dirty indicator

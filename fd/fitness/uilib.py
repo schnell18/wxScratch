@@ -9,6 +9,7 @@ import re
 import platform
 from fitness.model import CurriculumLesson
 from fitness.util import validate_filename
+from .images import catalog
 from shutil import copy
 
 
@@ -27,7 +28,20 @@ def MakePlaceholder(width, height):
     placeholder.Replace(0, 0, 0, 255, 255, 255)
     return placeholder.ConvertToBitmap()
 
+
 class FormDataChangeEvent(wx.CommandEvent):
+    def __init__(self, evtType, id):
+        wx.CommandEvent.__init__(self, evtType, id)
+        self.__dataObject__ = None
+
+    def SetDataObject(self, obj):
+        self.__dataObject__ = obj
+
+    def GetDataObject(self):
+        return self.__dataObject__
+
+
+class PreviewCellEvent(wx.CommandEvent):
     def __init__(self, evtType, id):
         wx.CommandEvent.__init__(self, evtType, id)
 
@@ -69,9 +83,11 @@ class BasePanel(wx.Panel):
 
                 if not text.startswith('*'):
                     parent.SetPageText(pageIndex, '*' + text)
+        self.SaveModel()
         # fire EVT_FORM_DATA_CHG
-        evt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
-        self.GetEventHandler().ProcessEvent(evt)
+        newEvt = FormDataChangeEvent(ftEVT_FORM_DATA_CHG, self.GetId())
+        newEvt.SetDataObject(self.model[0])
+        self.GetEventHandler().ProcessEvent(newEvt)
         evt.Skip()
 
     def _change_tree_label(self, treeItemId, text):
@@ -104,7 +120,7 @@ class FtFileDropTarget(wx.FileDropTarget):
 
 
 class ImagePreviewPanel(wx.Panel):
-    def __init__(self, parent, width=300, height=200, usage=None):
+    def __init__(self, parent, width=300, height=200, usage=None, withAddDel=False):
         wx.Panel.__init__(self, parent)
 
         self.innerPanel = wx.Panel(self, style=wx.NO_BORDER)
@@ -114,8 +130,9 @@ class ImagePreviewPanel(wx.Panel):
         self.relativePath = None
         self.usage = usage
 
-        self.btnPanel = self._createButtonPanel()
-        self.btnPanel.Show(False)
+        if withAddDel:
+            self.btnPanel = self._createButtonPanel()
+            self.btnPanel.Show(False)
 
         mainSizer = wx.BoxSizer(wx.VERTICAL)
         self.imgCtrl, self.captionLbl = self._create_controls()
@@ -128,12 +145,9 @@ class ImagePreviewPanel(wx.Panel):
         self.SetDropTarget(dt)
 
         self.Bind(wx.EVT_SIZE, self.OnSize)
-
-    def OnSize(self, event):
-        size = event.GetSize()
-        self.innerPanel.SetPosition((2, 2))
-        self.innerPanel.SetSize((size.x-4, size.y-4))
-        event.Skip()
+        if withAddDel:
+            self.Bind(wx.EVT_ENTER_WINDOW, self.OnEnterWindow)
+            self.Bind(wx.EVT_LEAVE_WINDOW, self.OnLeaveWindow)
 
     def Highlight(self):
         self.SetBackgroundColour('green')
@@ -220,16 +234,18 @@ class ImagePreviewPanel(wx.Panel):
         return imgCtrl, captionLbl
 
     def _createButtonPanel(self):
-        btnPanel = wx.Panel(self)
+        btnPanel = wx.Panel(self, pos=(0, 0))
         hSizer = wx.BoxSizer(wx.HORIZONTAL)
-        img = wx.Image('addimg2.png', wx.BITMAP_TYPE_PNG)
+        img = catalog['addimg2'].GetImage()
+        img = img.Size((24, 24), (4, 4))
         bmp = img.ConvertToBitmap()
         addBtn = wx.BitmapButton(btnPanel, bitmap=bmp)
-        img = wx.Image('delimg2.png', wx.BITMAP_TYPE_PNG)
+        img = catalog['delimg2'].GetImage()
+        img = img.Size((24, 24), (4, 4))
         bmp = img.ConvertToBitmap()
         delBtn = wx.BitmapButton(btnPanel, bitmap=bmp)
-        hSizer.Add(addBtn, 1, wx.ALL, 5)
-        hSizer.Add(delBtn, 1, wx.ALL, 5)
+        hSizer.Add(addBtn, 0, wx.ALL, 0)
+        hSizer.Add(delBtn, 0, wx.ALL, 0)
 
         self.Bind(wx.EVT_BUTTON, self.OnAddBtnPressed, addBtn)
         self.Bind(wx.EVT_BUTTON, self.OnDelBtnPressed, delBtn)
@@ -237,11 +253,29 @@ class ImagePreviewPanel(wx.Panel):
         btnPanel.Fit()
         return btnPanel
 
+    def OnSize(self, event):
+        size = event.GetSize()
+        self.innerPanel.SetPosition((2, 2))
+        self.innerPanel.SetSize((size.x-4, size.y-4))
+        event.Skip()
+
+    def OnEnterWindow(self, event):
+        self.btnPanel.Show(True)
+
+    def OnLeaveWindow(self, event):
+        self.btnPanel.Show(False)
+
     def OnAddBtnPressed(self, event):
-        pass
+        newEvt = PreviewCellEvent(ftEVT_PREVIEW_CELL_ADD, self.GetId())
+        newEvt.SetEventObject(self)
+        self.GetEventHandler().ProcessEvent(newEvt)
+        event.Skip()
 
     def OnDelBtnPressed(self, event):
-        pass
+        newEvt = PreviewCellEvent(ftEVT_PREVIEW_CELL_DEL, self.GetId())
+        newEvt.SetEventObject(self)
+        self.GetEventHandler().ProcessEvent(newEvt)
+        event.Skip()
 
     def _scale_to_fit(self, bmp):
         (width, height) = (bmp.GetWidth(), bmp.GetHeight())
@@ -600,6 +634,9 @@ class CurriLessonPanel(wx.Panel):
         self.GetEventHandler().ProcessEvent(newEvt)
         evt.Skip()
 
+    def UpdateLessonSource(self):
+        pass
+
     def OnAdd(self, evt):
         ref_no = self._get_lesson_refnos()[0]
         self.dvLesson.AppendItem([ref_no, u'请输入标题', False])
@@ -950,6 +987,9 @@ class CurriculumPanel(BasePanel):
 
         # TODO: assembly next curriculua
 
+    def UpdateLessonSource(self):
+        self.dvLessons.UpdateLessonSource()
+
     def OnMediaLoaded(self, evt):
         self.mediaCtrl.Pause()
         if not platform.system() == 'Windows':
@@ -1208,25 +1248,34 @@ class LessonExercisePanel(BasePanel):
             wx.VERTICAL
         )
 
-        bifSizer = wx.FlexGridSizer(0, 3, hgap=4, vgap=4)
-        bifSizer.AddGrowableCol(1)
-        bifSizer.SetFlexibleDirection(wx.BOTH)
-        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
-
         self.refNoLabel = wx.StaticText(
             biSizer.GetStaticBox(),
             wx.ID_ANY,
             u"动作编号"
         )
         self.refNoLabel.Wrap(-1)
-        bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
 
-        self.refNoText = wx.TextCtrl(
+        self.refNoText = wx.ComboBox(
             biSizer.GetStaticBox(),
-            id=wx.ID_ANY
+            id=wx.ID_ANY,
+            choices=self._get_exercise_nos()
         )
-        bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.Add(100, 0)
+
+        self.titleLabel = wx.StaticText(
+            biSizer.GetStaticBox(),
+            wx.ID_ANY,
+            u"标题",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0
+        )
+        self.titleLabel.Wrap(-1)
+
+        self.titleText = wx.TextCtrl(
+            biSizer.GetStaticBox(),
+            id=wx.ID_ANY,
+            name='title'
+        )
 
         self.repetitionLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -1234,15 +1283,12 @@ class LessonExercisePanel(BasePanel):
             u"重复"
         )
         self.repetitionLabel.Wrap(-1)
-        bifSizer.Add(self.repetitionLabel, 0, wx.ALL, 5)
 
         self.repetitionSpin = wx.SpinCtrl(
             biSizer.GetStaticBox(),
             id=wx.ID_ANY,
             max=100
         )
-        bifSizer.Add(self.repetitionSpin, 0, wx.ALL|wx.EXPAND, 5)
-        bifSizer.AddSpacer(1)
 
         self.measureLabel = wx.StaticText(
             biSizer.GetStaticBox(),
@@ -1253,18 +1299,29 @@ class LessonExercisePanel(BasePanel):
             0
         )
         self.measureLabel.Wrap(-1)
-        bifSizer.Add(self.measureLabel, 0, wx.ALL, 5)
 
         measureChoices = [u'次', u'秒']
         self.measureChoice = wx.Choice(
             biSizer.GetStaticBox(),
-            wx.ID_ANY,
-            wx.DefaultPosition,
-            wx.DefaultSize,
-            measureChoices,
-            0
+            id=wx.ID_ANY,
+            choices=measureChoices
         )
         self.measureChoice.SetSelection(0)
+
+        bifSizer = wx.FlexGridSizer(0, 3, hgap=4, vgap=4)
+        bifSizer.AddGrowableCol(1)
+        bifSizer.SetFlexibleDirection(wx.BOTH)
+        bifSizer.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
+        bifSizer.Add(self.refNoLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.refNoText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.Add(100, 0)
+        bifSizer.Add(self.titleLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.titleText, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.repetitionLabel, 0, wx.ALL, 5)
+        bifSizer.Add(self.repetitionSpin, 0, wx.ALL|wx.EXPAND, 5)
+        bifSizer.AddSpacer(1)
+        bifSizer.Add(self.measureLabel, 0, wx.ALL, 5)
         bifSizer.Add(self.measureChoice, 0, wx.ALL|wx.EXPAND, 5)
         bifSizer.AddSpacer(1)
         biSizer.Add(bifSizer, 0, wx.EXPAND | wx.ALL, 5)
@@ -1306,6 +1363,7 @@ class LessonExercisePanel(BasePanel):
     def LoadModel(self):
         model = self.model[0]
         self.refNoText.ChangeValue(model.exercise_ref)
+        self.titleText.ChangeValue(model.title)
         self.measureChoice.SetSelection(model.measure - 1)
         self.repetitionSpin.SetValue(model.repetition)
 
@@ -1324,12 +1382,21 @@ class LessonExercisePanel(BasePanel):
     def SaveModel(self):
         model = self.model[0]
         model.exercise_ref = self.refNoText.GetValue()
+        model.title = self.titleText.GetValue()
         model.measure = self.measureChoice.GetSelection() + 1
         model.repetition = self.repetitionSpin.GetValue()
 
         # TODO: save begin voices
 
         # TODO: save mid voices
+
+    def UpdateExerciseSource(self):
+        exNos = self._get_exercise_nos()
+        self.refNoText.SetItems(exNos)
+
+    def _get_exercise_nos(self):
+        frame = wx.GetTopLevelParent(self)
+        return [e.ref_no for e in frame.get_exercises()]
 
 
 class ExercisePanel(BasePanel):
@@ -1669,40 +1736,80 @@ class IllustrationPanel(BasePanel):
 
     def _layout_images(self):
         model = self.model[0]
+        self.CreateAddButton()
         if model.images:
             self.gSizer.Clear(delete_windows=True)
             frame = wx.GetTopLevelParent(self)
             for path in model.images:
-                prImg = ImagePreviewPanel(
-                    self.illuSizer.GetStaticBox(),
-                    usage='illu',
-                    width=280,
-                    height=210
-                )
-                prImg.LoadWithRelPath(frame.bundle.path, path)
-                self.prImgs.append(prImg)
-                self.gSizer.Add(prImg, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
-        img = wx.Image('addimg.png', wx.BITMAP_TYPE_PNG)
-        img = img.Size((100, 100), (18, 18))
-        bmp = img.ConvertToBitmap()
-        self.addBtn = wx.BitmapButton(self.illuSizer.GetStaticBox(), bitmap=bmp)
-        self.gSizer.Add(self.addBtn, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
-        self.Bind(wx.EVT_BUTTON, self.OnAddIlluImg, self.addBtn)
+                self.AddCell(frame.bundle.path, path)
+        else:
+            self.EnableAddButton()
 
     def OnAddIlluImg(self, event):
         self.AddIlluImg()
+        newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
+        self.GetEventHandler().ProcessEvent(newEvt)
+
+    def OnDelIlluImg(self, event):
+        evtObj = event.GetEventObject()
+        if isinstance(evtObj, ImagePreviewPanel):
+            self.DelIlluImg(evtObj)
+            newEvt = FormDataChangeEvent(ftEVT_SUB_FORM_DATA_CHG, self.GetId())
+            self.GetEventHandler().ProcessEvent(newEvt)
 
     def AddIlluImg(self):
+        frame = wx.GetTopLevelParent(self)
+        self.AddCell(frame.bundle.path)
+        if self.addBtn.IsShown():
+            self.DisableAddButton()
+        else:
+            self.scrollWin.Layout()
+            self.Layout()
+
+    def AddCell(self, bundle_dir, rel_path=None):
         prImg = ImagePreviewPanel(
             self.illuSizer.GetStaticBox(),
             usage='illu',
             width=280,
-            height=210
+            height=210,
+            withAddDel=True
         )
-        frame = wx.GetTopLevelParent(self)
-        prImg.LoadWithPlaceHolder(frame.bundle.path)
         self.prImgs.append(prImg)
-        idx = self.gSizer.GetItemCount() - 1
-        self.gSizer.Insert(idx, prImg, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+        if rel_path:
+            prImg.LoadWithRelPath(bundle_dir, rel_path)
+        else:
+            prImg.LoadWithPlaceHolder(bundle_dir)
+        self.Bind(EVT_PREVIEW_CELL_ADD, self.OnAddIlluImg)
+        self.Bind(EVT_PREVIEW_CELL_DEL, self.OnDelIlluImg)
+        self.gSizer.Add(prImg, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+
+    def DelIlluImg(self, prImg):
+        count = self.prImgs.count(prImg)
+        if count == 1:
+            self.prImgs.remove(prImg)
+            self.gSizer.Detach(prImg)
+            prImg.Show(False)
+            self.scrollWin.Layout()
+            self.Layout()
+        if not self.prImgs:
+            self.EnableAddButton()
+
+    def CreateAddButton(self):
+        img = catalog['addimg'].GetImage()
+        img = img.Size((100, 100), (18, 18))
+        bmp = img.ConvertToBitmap()
+        self.addBtn = wx.BitmapButton(self.illuSizer.GetStaticBox(), bitmap=bmp)
+        self.addBtn.Show(False)
+        self.Bind(wx.EVT_BUTTON, self.OnAddIlluImg, self.addBtn)
+
+    def EnableAddButton(self):
+        self.gSizer.Add(self.addBtn, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5)
+        self.addBtn.Show(True)
+        self.scrollWin.Layout()
+        self.Layout()
+
+    def DisableAddButton(self):
+        self.gSizer.Detach(self.addBtn)
+        self.addBtn.Show(False)
         self.scrollWin.Layout()
         self.Layout()
