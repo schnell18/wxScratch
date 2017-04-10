@@ -515,8 +515,16 @@ class FtFrame(wx.Frame):
         if not pageIndex == wx.NOT_FOUND:
             panel = notebook.GetPage(pageIndex)
             if isinstance(panel, BasePanel) and panel.IsDirty():
-                # TODO: prompt user
                 panel.SaveModel()
+                dlg = wx.MessageDialog(
+                    self,
+                    u'本页内容已修改，是否保存?',
+                    u'确认',
+                    wx.YES_NO | wx.ICON_QUESTION
+                )
+                if dlg.ShowModal() == wx.ID_YES:
+                    self._save()
+                dlg.Destroy()
         event.Allow()
 
     def OnTabChanged(self, event):
