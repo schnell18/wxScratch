@@ -358,10 +358,7 @@ class AvPreviewPanel(wx.Panel):
         self.mediaCtrl.Pause()
         txt = self._formatDuration(self.mediaCtrl.Length())
         self.captionLbl.SetLabel(txt)
-        if platform.system() == 'Windows':
-            self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_NONE)
-        else:
-            self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
     def _load(self, path):
         if os.path.exists(path):
@@ -992,8 +989,7 @@ class CurriculumPanel(BasePanel):
 
     def OnMediaLoaded(self, evt):
         self.mediaCtrl.Pause()
-        if not platform.system() == 'Windows':
-            self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
+        self.mediaCtrl.ShowPlayerControls(wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
     def OnVideoChanged(self, evt):
         self._loadVideo()
