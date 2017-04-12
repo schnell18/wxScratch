@@ -126,12 +126,9 @@ class FtFrame(wx.Frame):
         # layout main interface
         # splitter window
 
-        self.imageList = wx.ImageList(24, 24, True)
-        for img in [
-            'bundle', 'curriculum', 'lesson',
-            'exercise', 'illustration', 'segment']:
-            bmp = catalog[img].GetBitmap()
-            self.imageList.Add(bmp)
+        # image list MUST NOT be shared, otherwise seg fault
+        self.treeImageList = self._createImageList()
+        self.tabImageList = self._createImageList()
 
         self.sp = wx.SplitterWindow(self, style=wx.SP_LIVE_UPDATE|wx.SP_3DSASH)
         self.left = self.createTreePanel(self.sp)
@@ -211,7 +208,7 @@ class FtFrame(wx.Frame):
             wx.DefaultSize,
             wx.TR_DEFAULT_STYLE
         )
-        self.tree.AssignImageList(self.imageList)
+        self.tree.AssignImageList(self.treeImageList)
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
         self.tree.Bind(wx.EVT_TREE_BEGIN_DRAG, self.OnTreeBeginDrag)
         self.tree.Bind(wx.EVT_TREE_END_DRAG, self.OnTreeEndDrag)
@@ -234,7 +231,7 @@ class FtFrame(wx.Frame):
 
         self.Bind(wx.aui.EVT_AUINOTEBOOK_PAGE_CLOSE, self.OnTabClose, notebook)
         self.Bind(wx.aui.EVT_AUINOTEBOOK_PAGE_CHANGED, self.OnTabChanged, notebook)
-        notebook.AssignImageList(self.imageList)
+        notebook.AssignImageList(self.tabImageList)
         return notebook
 
     def createSimpleTool(self, label, filename, help, handler):
@@ -261,6 +258,15 @@ class FtFrame(wx.Frame):
         for each in self.toolbarData():
             self.createSimpleTool(*each)
         self.toolbar.Realize()
+
+    def _createImageList(self):
+        imageList = wx.ImageList(24, 24, True)
+        for img in [
+            'bundle', 'curriculum', 'lesson',
+            'exercise', 'illustration', 'segment']:
+            bmp = catalog[img].GetBitmap()
+            imageList.Add(bmp)
+        return imageList
 
     def OnTreeBeginDrag(self, event):
         if self.canDrag(event.GetItem()):
