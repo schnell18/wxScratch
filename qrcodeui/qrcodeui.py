@@ -72,8 +72,7 @@ class QRCodePanel(wx.Panel):
         self.qrcodeImg = wx.StaticBitmap(
             self,
             id=wx.ID_ANY,
-            label=wx.NullBitmap,
-            size=(135, 130)
+            label=wx.NullBitmap
         )
 
         fgSizer = wx.FlexGridSizer(0, 4, 4, 4)
