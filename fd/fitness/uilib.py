@@ -130,12 +130,12 @@ class ImagePreviewPanel(wx.Panel):
         self.relativePath = None
         self.usage = usage
 
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        self.imgCtrl, self.captionLbl = self._create_controls()
+
         if withAddDel:
             self.btnPanel = self._createButtonPanel()
             self.btnPanel.Show(False)
-
-        mainSizer = wx.BoxSizer(wx.VERTICAL)
-        self.imgCtrl, self.captionLbl = self._create_controls()
 
         mainSizer.Add(self.imgCtrl, 1, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5)
         mainSizer.Add(self.captionLbl, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 0)
@@ -146,8 +146,8 @@ class ImagePreviewPanel(wx.Panel):
 
         self.Bind(wx.EVT_SIZE, self.OnSize)
         if withAddDel:
-            self.Bind(wx.EVT_ENTER_WINDOW, self.OnEnterWindow)
-            self.Bind(wx.EVT_LEAVE_WINDOW, self.OnLeaveWindow)
+            self.imgCtrl.Bind(wx.EVT_ENTER_WINDOW, self.OnEnterWindow)
+            self.imgCtrl.Bind(wx.EVT_LEAVE_WINDOW, self.OnLeaveWindow)
 
     def Highlight(self):
         self.SetBackgroundColour('green')
@@ -234,7 +234,7 @@ class ImagePreviewPanel(wx.Panel):
         return imgCtrl, captionLbl
 
     def _createButtonPanel(self):
-        btnPanel = wx.Panel(self, pos=(0, 0))
+        btnPanel = wx.Panel(self, pos=(4, 4))
         hSizer = wx.BoxSizer(wx.HORIZONTAL)
         img = catalog['addimg2'].GetImage()
         img = img.Size((24, 24), (4, 4))

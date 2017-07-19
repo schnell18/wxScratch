@@ -10,3 +10,5 @@
 .idea/
 .ipynb_checkpoints/
 data/
+build/
+dist/
