@@ -3,10 +3,12 @@
 
 import wx
 import qrcode
+import barcode
 from qrcode.constants import ERROR_CORRECT_L
 from qrcode.constants import ERROR_CORRECT_M
 from qrcode.constants import ERROR_CORRECT_Q
 from qrcode.constants import ERROR_CORRECT_H
+from barcode.writer import ImageWriter
 
 __ec_levels__ = [
     ERROR_CORRECT_L,
@@ -15,7 +17,7 @@ __ec_levels__ = [
     ERROR_CORRECT_H
 ]
 
-class QRCodePanel(wx.Panel):
+class BarcodePanel(wx.Panel):
     def __init__(self, parent):
         wx.Panel.__init__(
             self,
@@ -35,7 +37,7 @@ class QRCodePanel(wx.Panel):
         self.autoPasteCheck = wx.CheckBox(
             self,
             id=wx.ID_ANY,
-            label=u"Auto Paste from clipboard"
+            label=u"自动复制系统剪切板中的内容"
         )
         self.autoPasteCheck.SetValue(True)
 
@@ -81,6 +83,11 @@ class QRCodePanel(wx.Panel):
             id=wx.ID_ANY
         )
 
+        self.barcodeImg = wx.StaticBitmap(
+            self,
+            id=wx.ID_ANY
+        )
+
         fgSizer = wx.FlexGridSizer(0, 4, 4, 4)
         fgSizer.AddGrowableCol(2)
         fgSizer.SetFlexibleDirection(wx.BOTH)
@@ -118,6 +125,12 @@ class QRCodePanel(wx.Panel):
             wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL|wx.ALL,
             5
         )
+        mainSizer.Add(
+            self.barcodeImg,
+            1,
+            wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL|wx.ALL,
+            5
+        )
 
         self.SetSizer(mainSizer)
         self.Layout()
@@ -126,7 +139,6 @@ class QRCodePanel(wx.Panel):
         self.contentText.Bind(wx.EVT_TEXT, self.OnTextChanged)
         self.Bind(wx.EVT_SPINCTRL, self.OnNumberChanged)
         self.Bind(wx.EVT_RADIOBOX, self.OnEcLevelChanged)
-        self.Bind(wx.EVT_CHILD_FOCUS, self.OnFocused)
 
     def gen_qr_bitmap_for(self, text, ecLevel=2, boxSize=3, border=4):
         qr = qrcode.QRCode(
@@ -139,6 +151,19 @@ class QRCodePanel(wx.Panel):
         qr.make(fit=True)
         x = qr.make_image()
         pil = x.get_image()
+        img = wx.Image(pil.width, pil.height)
+        img.SetData(pil.convert('RGB').tobytes())
+        return img.ConvertToBitmap()
+
+    def gen_barcode_bitmap_for(self, text, ecLevel=2, boxSize=3, border=4):
+        code128 = barcode.get(
+            "code128",
+            text, 
+            writer = ImageWriter()
+        )
+        pil = code128.render(
+            writer_options=dict(module_height=8.0, text_distance=2.0)
+        )
         img = wx.Image(pil.width, pil.height)
         img.SetData(pil.convert('RGB').tobytes())
         return img.ConvertToBitmap()
@@ -156,33 +181,53 @@ class QRCodePanel(wx.Panel):
         self._regenerate()
 
     def OnFocused(self, event):
-        success = False
-        data = wx.TextDataObject()
-        if self.autoPasteCheck.IsChecked() and wx.TheClipboard.Open():
-            success = wx.TheClipboard.GetData(data)
-            wx.TheClipboard.Close()
-        if success:
-            self.contentText.SetValue(data.GetText())
-        event.Skip()
+        if self.autoPasteCheck.IsChecked():
+            success = False
+            data = wx.TextDataObject()
+            if wx.TheClipboard.Open():
+                success = wx.TheClipboard.GetData(data)
+                wx.TheClipboard.Close()
+            if success:
+                clipboardText = data.GetText() 
+                if clipboardText != self.contentText.GetValue():
+                    self.contentText.SetValue(clipboardText)
+        if event:
+            event.Skip()
 
     def _regenerate(self):
+        content = self.contentText.GetValue()
         boxSize = self.blockPixelSpin.GetValue()
         border = self.borderSpin.GetValue()
         ecLevel = self.ecRadioBox.GetSelection()
         img = self.gen_qr_bitmap_for(
-            self.contentText.GetValue(),
+            content,
             ecLevel=ecLevel,
             boxSize=boxSize,
             border=border
         )
         self.qrcodeImg.SetBitmap(img)
+
+        # protect the python-barcode library from error like
+        # IndexError: list index out of range
+        if len(content) > 2:
+            img = self.gen_barcode_bitmap_for(
+                content,
+                ecLevel=ecLevel,
+                boxSize=boxSize,
+                border=border
+            )
+            self.barcodeImg.SetBitmap(img)
+
         self.Layout()
 
 
 class MyFrame(wx.Frame):
-    def __init__(self, parent, size=(450, 500)):
-        wx.Frame.__init__(self, parent, title=u'二维码生成器', size=size)
-        panel = QRCodePanel(self)
+    def __init__(self, parent, size=(800, 600)):
+        wx.Frame.__init__(self, parent, title=u'条形码生成器', size=size)
+        self.panel = BarcodePanel(self)
+
+    def OnFocused(self, event):
+        self.panel.OnFocused(event)
 
     def __del__(self):
         pass
@@ -191,5 +236,7 @@ class MyFrame(wx.Frame):
 if __name__ == '__main__':
     app = wx.App(False)
     frame = MyFrame(None)
+    app.Bind(wx.EVT_ACTIVATE_APP, frame.OnFocused)
     frame.Show()
+    frame.OnFocused(None)
     app.MainLoop()
