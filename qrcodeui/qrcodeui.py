@@ -32,6 +32,13 @@ class QRCodePanel(wx.Panel):
             style=wx.TE_MULTILINE
         )
 
+        self.autoPasteCheck = wx.CheckBox(
+            self,
+            id=wx.ID_ANY,
+            label=u"Auto Paste from clipboard"
+        )
+        self.autoPasteCheck.SetValue(True)
+
         self.ecLabel = wx.StaticText(self, wx.ID_ANY, u"容错级别")
         self.ecLabel.Wrap(-1)
 
@@ -71,8 +78,7 @@ class QRCodePanel(wx.Panel):
 
         self.qrcodeImg = wx.StaticBitmap(
             self,
-            id=wx.ID_ANY,
-            label=wx.NullBitmap
+            id=wx.ID_ANY
         )
 
         fgSizer = wx.FlexGridSizer(0, 4, 4, 4)
@@ -86,6 +92,10 @@ class QRCodePanel(wx.Panel):
         fgSizer.Add(10, 0)
         fgSizer.Add(self.contentLabel, 0, wx.ALL, 0)
         fgSizer.Add(self.contentText, 0, wx.ALL|wx.EXPAND, 0)
+        fgSizer.Add(10, 0)
+        fgSizer.Add(10, 0)
+        fgSizer.Add(10, 0)
+        fgSizer.Add(self.autoPasteCheck, 0, wx.ALL|wx.EXPAND, 0)
         fgSizer.Add(10, 0)
         fgSizer.Add(10, 0)
         fgSizer.Add(self.ecLabel, 0, wx.ALL, 0)
@@ -148,7 +158,7 @@ class QRCodePanel(wx.Panel):
     def OnFocused(self, event):
         success = False
         data = wx.TextDataObject()
-        if wx.TheClipboard.Open():
+        if self.autoPasteCheck.IsChecked() and wx.TheClipboard.Open():
             success = wx.TheClipboard.GetData(data)
             wx.TheClipboard.Close()
         if success:

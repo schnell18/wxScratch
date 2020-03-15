@@ -2,5 +2,6 @@ wx
 Pillow
 qrcode
 ConfigParser
-PyYaml
+pyyaml>=4.2b1
 https://cdn.mysql.com/Downloads/Connector-Python/mysql-connector-python-2.1.4.tar.gz
+
