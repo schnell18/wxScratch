@@ -25,7 +25,7 @@ class BarcodePanel(wx.Panel):
             style=wx.TAB_TRAVERSAL
         )
 
-        self.contentLabel = wx.StaticText(self, wx.ID_ANY, u"内容")
+        self.contentLabel = wx.StaticText(self, wx.ID_ANY, u"Content")
         self.contentLabel.Wrap(-1)
         self.contentText = wx.TextCtrl(
             self,
@@ -37,14 +37,14 @@ class BarcodePanel(wx.Panel):
         self.autoPasteCheck = wx.CheckBox(
             self,
             id=wx.ID_ANY,
-            label=u"自动复制系统剪切板中的内容"
+            label=u"Paste content from system clipboard automatically"
         )
         self.autoPasteCheck.SetValue(True)
 
-        self.ecLabel = wx.StaticText(self, wx.ID_ANY, u"容错级别")
+        self.ecLabel = wx.StaticText(self, wx.ID_ANY, u"Error Correction Levels")
         self.ecLabel.Wrap(-1)
 
-        choices = [u"低", u"中", u"准高", u"高"]
+        choices = [u"Low", u"Medium", u"Quasi", u"High"]
         self.ecRadioBox = wx.RadioBox(
             self,
             id=wx.ID_ANY,
@@ -54,7 +54,7 @@ class BarcodePanel(wx.Panel):
         )
         self.ecRadioBox.SetSelection(3)
 
-        self.borderLabel = wx.StaticText(self, wx.ID_ANY, u"留白")
+        self.borderLabel = wx.StaticText(self, wx.ID_ANY, u"Whitespace")
         self.borderLabel.Wrap(-1)
 
         self.borderSpin = wx.SpinCtrl(
@@ -66,7 +66,7 @@ class BarcodePanel(wx.Panel):
             max=10
         )
 
-        self.blockPixelLabel = wx.StaticText(self, wx.ID_ANY, u"方块像素")
+        self.blockPixelLabel = wx.StaticText(self, wx.ID_ANY, u"Pixel Squares")
         self.blockPixelLabel.Wrap(-1)
 
         self.blockPixelSpin = wx.SpinCtrl(
@@ -223,7 +223,7 @@ class BarcodePanel(wx.Panel):
 
 class MyFrame(wx.Frame):
     def __init__(self, parent, size=(800, 600)):
-        wx.Frame.__init__(self, parent, title=u'条形码生成器', size=size)
+        wx.Frame.__init__(self, parent, title=u"Barcode Generator", size=size)
         self.panel = BarcodePanel(self)
 
     def OnFocused(self, event):
