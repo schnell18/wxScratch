@@ -1,4 +1,4 @@
-wxPython==4.0.7
+wxPython==4.2.1
 qrcode==6.1
 python-barcode
 pyinstaller==3.6

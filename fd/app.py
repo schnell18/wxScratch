@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import ConfigParser
+import configparser
 import os
 import wx
 import wx.aui
@@ -724,11 +724,11 @@ class FtFrame(wx.Frame):
           return result
 
     def getParser(self):
-        config = ConfigParser.RawConfigParser()
-        config.read(expanduser('~/.fitness/config.ini'))
-        db_cfg = {t[0]: t[1] for t in config.items('mysql')}
+        parser = configparser.ConfigParser()
+        parser.read(expanduser('~/.fitness/config.ini'))
+        db_cfg = {t[0]: t[1] for t in parser.items('mysql')}
         db_cfg['raise_on_warnings'] = True
-        mgr_cfg = {t[0]: t[1] for t in config.items('general')}
+        mgr_cfg = {t[0]: t[1] for t in parser.items('general')}
         return Parser(mgr_cfg, db_cfg)
 
     def _get_prototype_by_sibling(self, treeItemId):

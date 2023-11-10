@@ -2,7 +2,8 @@
 from os.path import basename
 from os.path import getsize
 from os.path import join
-from util import md5sum
+from hashlib import md5
+from pathlib import Path
 
 
 class Bundle:
@@ -148,7 +149,8 @@ class ResourceSet:
         if not path:
             return
         fp = join(base_dir, path)
-        checksum = md5sum(fp)
+
+        checksum = md5(Path(fp).read_bytes()).hexdigest()
         filename = basename(path)
         if not self.resource_set.get(checksum):
             sub_dir = 'l' if lesson_ref else 's'

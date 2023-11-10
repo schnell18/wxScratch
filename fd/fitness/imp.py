@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import wx
-import ConfigParser
+import configparser
 import qrcode
 import os.path
 from threading         import Thread
@@ -40,13 +40,13 @@ class ImpThread(Thread):
 
     def run(self):
         try:
-            config = ConfigParser.RawConfigParser()
-            config.read(expanduser('~/.fitness/config.ini'))
-            ftp_cfg = {t[0]: t[1] for t in config.items('ftp.resource')}
-            db_cfg = {t[0]: t[1] for t in config.items('mysql')}
+            parser = configparser.ConfigParser()
+            parser.read(expanduser('~/.fitness/config.ini'))
+            ftp_cfg = {t[0]: t[1] for t in parser.items('ftp.resource')}
+            db_cfg = {t[0]: t[1] for t in parser.items('mysql')}
             db_cfg['raise_on_warnings'] = True
-            tfs_cfg = {t[0]: t[1] for t in config.items('tfs')}
-            mgr_cfg = {t[0]: t[1] for t in config.items('general')}
+            tfs_cfg = {t[0]: t[1] for t in parser.items('tfs')}
+            mgr_cfg = {t[0]: t[1] for t in parser.items('general')}
 
             repo = CompositeRepo(db_cfg)
             ftp = FtpClient(ftp_cfg)

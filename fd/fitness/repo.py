@@ -3,10 +3,10 @@ import sys
 
 import mysql.connector
 from mysql.connector import errorcode
-from model import Curriculum
-from model import Exercise
-from model import Lesson
-from model import Resource
+from .model import Curriculum
+from .model import Exercise
+from .model import Lesson
+from .model import Resource
 
 
 class CompositeRepo:
