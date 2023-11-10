@@ -121,7 +121,7 @@ class BarcodePanel(wx.Panel):
         mainSizer.Add(fgSizer, 0, wx.ALL|wx.EXPAND, 5)
         mainSizer.Add(
             self.qrcodeImg,
-            1,
+            2,
             wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL|wx.ALL,
             5
         )
@@ -162,7 +162,7 @@ class BarcodePanel(wx.Panel):
             writer = ImageWriter()
         )
         pil = code128.render(
-            writer_options=dict(module_height=8.0, text_distance=2.0)
+            writer_options=dict(module_height=8.0, text_distance=6.0)
         )
         img = wx.Image(pil.width, pil.height)
         img.SetData(pil.convert('RGB').tobytes())
